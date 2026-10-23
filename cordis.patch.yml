@@ -23,6 +23,9 @@
         # an id it refuses disables the lever for that Agent (the turn retries
         # without it) instead of failing.
         reasoningEffort: low
+        # Max keeps low reasoning latency too, but its policy deliberately
+        # spends more token/tool budget on independent work in parallel.
+        maxReasoningEffort: low
         # Append one JSON line per applied policy step to
         # $DSH_HOME/storages/dsh-turbo/evidence.jsonl so "strategy really ran"
         # is provable from logs, not from reply length.

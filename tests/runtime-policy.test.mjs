@@ -78,9 +78,16 @@ test('the prompt section renders the policy only for Turbo Sessions', () => {
     assert.match(text, /verified/i)
     assert.match(text, /permissions/i)
 
-    const other = { id: 'session-other', session: { id: 'session-other' } }
-    assert.equal(section.text({ agent: other }), '', 'other Sessions are untouched')
-    assert.equal(section.text({}), '', 'an assembly without an agent gets no policy')
+    return writeState(host, { sessionId: SESSION, mode: 'turbo', gear: 'max', expectedRevision: 1 }).then(() => {
+      const maxText = section.text({ agent })
+      assert.match(maxText, /MAX GEAR/)
+      assert.match(maxText, /extra token and tool budget/i)
+      assert.match(maxText, /same turn instead of serially/i)
+
+      const other = { id: 'session-other', session: { id: 'session-other' } }
+      assert.equal(section.text({ agent: other }), '', 'other Sessions are untouched')
+      assert.equal(section.text({}), '', 'an assembly without an agent gets no policy')
+    })
   })
 })
 
@@ -88,6 +95,7 @@ test('the config rejects unknown keys and invalid values', () => {
   assert.deepEqual(resolveConfig(undefined), {
     sectionOrder: 700,
     reasoningEffort: 'inherit',
+    maxReasoningEffort: 'low',
     evidenceLog: true,
     storageDir: 'dsh-turbo',
     defaultMode: 'default',
@@ -95,6 +103,7 @@ test('the config rejects unknown keys and invalid values', () => {
   assert.throws(() => resolveConfig({ nope: true }), /unknown config key/)
   assert.throws(() => resolveConfig({ sectionOrder: 'high' }), /finite number/)
   assert.throws(() => resolveConfig({ reasoningEffort: 'turbo' }), /reasoningEffort/)
+  assert.throws(() => resolveConfig({ maxReasoningEffort: 'turbo' }), /maxReasoningEffort/)
   assert.throws(() => resolveConfig({ storageDir: '../escape' }), /storageDir/)
   assert.throws(() => resolveConfig({ defaultMode: 'warp' }), /defaultMode/)
   // A deployment may make Turbo the default for new Sessions.
@@ -131,7 +140,7 @@ test('Turbo alone lowers reasoning effort and preserves the rest of the request'
   ;({ body } = await readState(host))
   effort = body.capabilities.find((entry) => entry.id === 'reasoning-effort')
   assert.equal(effort.state, 'applied', 'the wire really carried the configured effort')
-  assert.match(effort.detail, /observed in request\/header/)
+  assert.match(effort.detail, /in request\/header/)
 
   // The shipped model-selection listener re-applies its own effort; a header
   // that disagrees must demote the capability instead of lying about it.
@@ -142,7 +151,7 @@ test('Turbo alone lowers reasoning effort and preserves the rest of the request'
   ;({ body } = await readState(host))
   effort = body.capabilities.find((entry) => entry.id === 'reasoning-effort')
   assert.equal(effort.state, 'off')
-  assert.match(effort.detail, /still resolved "high"/)
+  assert.match(effort.detail, /resolved "high"/)
 
   await writeState(host, { sessionId: SESSION, mode: 'default', expectedRevision: 1 })
   assert.deepEqual(await request(), baseline, 'turning Turbo OFF restores the upstream request')
@@ -182,7 +191,7 @@ test('a refused reasoning effort retries the turn instead of failing it', async 
   const { body } = await readState(host)
   const effort = body.capabilities.find((entry) => entry.id === 'reasoning-effort')
   assert.equal(effort.state, 'off')
-  assert.match(effort.detail, /refused reasoningEffort "minimal"/)
+  assert.match(effort.detail, /refused a selected gear effort/)
   assert.match(effort.detail, /kept the turn alive/)
 })
 
@@ -228,6 +237,7 @@ test('GET /state reports default, capabilities and metrics for an unknown Sessio
   assert.equal(status, 200)
   assert.equal(body.ok, true)
   assert.equal(body.state.mode, 'default')
+  assert.equal(body.state.gear, 'fast')
   assert.equal(body.state.revision, 0)
   assert.equal(body.plugin.name, 'dsh-turbo')
   const ids = body.capabilities.map((entry) => entry.id)
@@ -247,7 +257,7 @@ test('GET /state reports default, capabilities and metrics for an unknown Sessio
   assert.equal(promptCap.state, 'applied')
   const effort = body.capabilities.find((entry) => entry.id === 'reasoning-effort')
   assert.equal(effort.state, 'off')
-  assert.match(effort.detail, /Model route untouched/)
+  assert.match(effort.detail, /Fast "inherit" \/ Max "low"/)
   const optional = body.capabilities.find((entry) => entry.id === 'optional-stages')
   assert.equal(optional.state, 'unavailable', 'turbo never claims it can skip a stage it cannot see')
 })
@@ -257,6 +267,7 @@ test('POST /state is Host-authoritative and rejects a stale revision', async () 
   const on = await writeState(host, { sessionId: SESSION, mode: 'turbo', expectedRevision: 0 })
   assert.equal(on.status, 200)
   assert.equal(on.body.state.mode, 'turbo')
+  assert.equal(on.body.state.gear, 'fast')
   assert.equal(on.body.state.revision, 1)
 
   const stale = await writeState(host, { sessionId: SESSION, mode: 'default', expectedRevision: 0 })
@@ -271,6 +282,27 @@ test('POST /state is Host-authoritative and rejects a stale revision', async () 
   assert.equal(off.body.state.revision, 2)
 })
 
+test('Max gear is revision-guarded and selects its own request effort', async () => {
+  const host = boot({ reasoningEffort: 'off', maxReasoningEffort: 'low' })
+  const agent = { id: SESSION, session: { id: SESSION }, ctx: host.ctx }
+  host.emit('agent/created', { agent })
+  const selected = await writeState(host, { sessionId: SESSION, mode: 'turbo', gear: 'max', expectedRevision: 0 })
+  assert.equal(selected.status, 200)
+  assert.equal(selected.body.state.gear, 'max')
+
+  const baseline = { provider: 'deepseek-official', reasoningEffort: 'high' }
+  const request = await host.dispatchWaterfall(
+    'agent/request',
+    { turn: 1, step: 1, signal: new AbortController().signal },
+    () => Promise.resolve(baseline),
+  )
+  assert.deepEqual(request, { ...baseline, reasoningEffort: 'low' })
+
+  const stale = await writeState(host, { sessionId: SESSION, mode: 'turbo', gear: 'fast', expectedRevision: 0 })
+  assert.equal(stale.status, 409)
+  assert.equal(stale.body.state.gear, 'max')
+})
+
 test('POST /state rejects malformed requests without touching state', async () => {
   const host = boot()
   const missing = await writeState(host, { mode: 'turbo' })
@@ -279,6 +311,8 @@ test('POST /state rejects malformed requests without touching state', async () =
   assert.equal(badMode.status, 400)
   const badRevision = await writeState(host, { sessionId: SESSION, mode: 'turbo', expectedRevision: -1 })
   assert.equal(badRevision.status, 400)
+  const badGear = await writeState(host, { sessionId: SESSION, mode: 'turbo', gear: 'warp' })
+  assert.equal(badGear.status, 400)
   const stillDefault = await readState(host)
   assert.equal(stillDefault.body.state.mode, 'default')
 

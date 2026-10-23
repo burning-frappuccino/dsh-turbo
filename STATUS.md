@@ -11,6 +11,10 @@
 切换后 `agent/pre-step` 证据显示策略集合从"全 false"变为"全 true"。
 性能部分（Phase 3）测完并给出了**否定的诚实结论**：没有可重复的加速（`PERFORMANCE.md`）。
 
+**0.2.0 新增“极速 / 极限”两档滑块**：极速档延续低成本直接路径；极限档允许增加 Token 和工具预算，
+并行获取上下文、调用互不依赖的工具和可用子任务。档位由 Host 按会话持久化并做 revision 冲突保护，旧版
+状态自动迁移为极速档。极限档不会重复执行有副作用的写操作，也不绕过权限、沙箱和必要验证。
+
 **0.1.4 把问号弹窗改为面向普通用户的效果说明**：不再公开模式、轮数、工具调用和内部机制，改为展示
 “约 20% 减少执行流程”“约 1.5× 提升完成速度”及同题 ON/OFF 小测试邀请。底层诊断数据仍保留在 Host API。
 
@@ -23,9 +27,9 @@
    `request/header` 已带上 `"reasoningEffort":"low"`（见 §6 的探针记录）。
 3. 现在**以 `request/header` 为准**判定是否生效：只有真实请求带上配置值才显示 `applied`；被路由拒绝则撤销该杠杆、
    让本轮重试，并在能力表里写明原因（不再出现"UI 说生效、实际没生效"）。
-4. 新增两条测试覆盖"被拒绝→重试"与"无关错误不拦截"，测试总数 40。
+4. 新增两条测试覆盖"被拒绝→重试"与"无关错误不拦截"；0.2.0 后测试总数 44。
 
-当前运行实例（11:52 启动）仍是 0.1.0 的模块；加载 0.1.4 需要重启 DSH（见 §4）。
+从旧版升级到 0.2.0 后需要重启 DSH，Node/Cordis 才会重新载入模块（见 §4）。
 
 ---
 
@@ -66,15 +70,15 @@
 | `src/version.ts` | 版本常量（`build --check` 会校验与 package.json 一致） |
 | `src/host/plugin.ts` | Cordis 插件：配置校验、存储/度量/证据装配、HTTP 桥（可选 `ctx.inject(['webServer'])`）、生命周期 |
 | `src/host/runtime-adapter.ts` | 策略引擎与 Harness 适配层：提示词 section、`agent/pre-step` 证据、`session/event` 度量、可选 `agent/request` 降推理 |
-| `src/host/session-store.ts` | 按 SessionId 保存模式，revision 版本号防并发覆盖，持久化 + 过期清理 |
+| `src/host/session-store.ts` | 按 SessionId 保存模式和档位，revision 防并发覆盖，v1→v2 自动迁移、持久化 + 过期清理 |
 | `src/host/metrics.ts` | 从会话事件算轮次耗时/步数/工具调用/是否跑过验证 |
 | `src/host/evidence.ts` | JSONL 证据日志（1 MiB 轮转） |
 | `src/host/json-file.ts` | 防抖 + 原子写的小型 JSON 文档 |
 | `src/host/cordis-surface.ts` | 只用到的 Cordis 表面结构化类型（解释为何零 DSH 依赖） |
 | `src/shared/types.ts` · `src/shared/policies.ts` | 线上协议类型；`ExecutionPolicy` 词汇与默认策略 |
-| `src/prompts/turbo-policy.ts` | 唯一一段提示词（v2：最便宜的一次证明 + `Verified:` 披露行） |
+| `src/prompts/turbo-policy.ts` | 极速/极限策略文本（极限档并行广度 + 最便宜的一次证明 + `Verified:` 披露行） |
 | `src/client/index.ts` | 客户端插件：注册 `conversation.input.right` slot、locale 词典、作用域 CSS |
-| `src/client/turbo-toggle.tsx` | 开关组件 + 用户效果说明（约 20% 流程节省、约 1.5× 加速、小测试邀请）；技术诊断仍保留在 Host API |
+| `src/client/turbo-toggle.tsx` | 开关、极速/极限两档滑块 + 用户效果说明；技术诊断仍保留在 Host API |
 | `src/client/turbo-controller.ts` | 无 React 的桥接客户端：read/write/conflict/offline 分支 |
 
 ### 3.3 测试与基准
@@ -106,7 +110,8 @@
 
 | 事项 | 原因 | 怎么做 |
 |---|---|---|
-| 运行中的 GUI 仍是 **0.1.0** | Cordis/Node 按解析路径缓存 ESM 模块，`disabled→enabled` 不会重新 import（`compatibility-report.md` §9） | 重启 DeepSeek Harness；`/api/dsh-turbo/health` 应报告 `version: 0.1.4`，且问号弹窗显示效果说明 |
+| GUI 升级后需要重启 | Cordis/Node 按解析路径缓存 ESM 模块，`disabled→enabled` 不会重新 import（`compatibility-report.md` §9） | 重启 DeepSeek Harness；`/api/dsh-turbo/health` 应报告 `version: 0.2.0`，输入区应显示两档滑块 |
+| 极限档真实收益尚未做配对实测 | 极限档新增于 0.2.0；它只在任务存在可并行工作时可能降低总耗时 | 用同一模型、同一提示词分别跑极速/极限，多次交错测试耗时、Token、步骤和工具调用 |
 | `reasoningEffort: low` 的真实加速幅度尚未实测 | Phase 3 两轮两臂都是 `high`，不包含这个杠杆；杠杆现在才被证明有效 | 用 `scripts/benchmark.mjs` 以 `reasoningEffort: low` 的 Turbo ON 对照上游 OFF 重跑 |
 | 窄屏布局只做了 CSS 层面的适配 | 没有改动用户窗口尺寸去实测 | 在窄窗口打开输入区确认；`@media (max-width:640px)` 会隐藏 ON 状态的文字只留 ⚡ |
 
@@ -118,6 +123,6 @@
 cd C:\path\to\dsh-turbo
 pnpm exec tsc --noEmit          # 严格类型检查，无输出
 node scripts/build.mjs --check  # build output matches src/
-node --test tests/*.test.mjs    # 40 tests / 40 pass
+node --test tests/*.test.mjs    # 44 tests / 44 pass
 Invoke-RestMethod http://127.0.0.1:19387/api/dsh-turbo/health    # 运行中的 Host
 ```

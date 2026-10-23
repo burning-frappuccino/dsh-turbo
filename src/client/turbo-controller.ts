@@ -15,6 +15,7 @@
 
 import type {
   TurboMode,
+  TurboGear,
   TurboSessionState,
   TurboSessionMetrics,
   TurboCapability,
@@ -82,8 +83,9 @@ export class TurboController {
    * @param expectedRevision - the revision currently on screen; the Host
    *   rejects the write when another tab has moved past it.
    */
-  async write(mode: TurboMode, expectedRevision: number | undefined): Promise<TurboResult> {
+  async write(mode: TurboMode, expectedRevision: number | undefined, gear?: TurboGear): Promise<TurboResult> {
     const body: Record<string, unknown> = { sessionId: this.#sessionId, mode }
+    if (gear !== undefined) body['gear'] = gear
     if (expectedRevision !== undefined) body['expectedRevision'] = expectedRevision
     return this.#request('POST', '/state', body)
   }
@@ -114,7 +116,7 @@ export class TurboController {
         return {
           kind: 'conflict',
           view: {
-            state: payload.state,
+            state: normalizeState(payload.state),
             capabilities: [],
             metrics: emptyMetrics(),
             live: false,
@@ -130,7 +132,7 @@ export class TurboController {
       return {
         kind: 'ok',
         view: {
-          state: payload.state,
+          state: normalizeState(payload.state),
           capabilities: payload.capabilities,
           metrics: payload.metrics,
           live: payload.live,
@@ -180,6 +182,7 @@ function isReply(value: unknown): value is Extract<TurboStateReply, { ok: true }
   const stateRecord = state as Record<string, unknown>
   return typeof stateRecord['sessionId'] === 'string'
     && (stateRecord['mode'] === 'turbo' || stateRecord['mode'] === 'default')
+    && (stateRecord['gear'] === undefined || stateRecord['gear'] === 'fast' || stateRecord['gear'] === 'max')
     && typeof stateRecord['revision'] === 'number'
     && Array.isArray(record['capabilities'])
     && typeof record['metrics'] === 'object'
@@ -194,5 +197,11 @@ function isConflict(value: unknown): value is { ok: false; state: TurboSessionSt
   const stateRecord = state as Record<string, unknown>
   return typeof stateRecord['sessionId'] === 'string'
     && (stateRecord['mode'] === 'turbo' || stateRecord['mode'] === 'default')
+    && (stateRecord['gear'] === undefined || stateRecord['gear'] === 'fast' || stateRecord['gear'] === 'max')
     && typeof stateRecord['revision'] === 'number'
+}
+
+/** Older 0.1 Hosts had no gear field; treat their Turbo mode as Fast. */
+function normalizeState(state: TurboSessionState): TurboSessionState {
+  return { ...state, gear: state.gear === 'max' ? 'max' : 'fast' }
 }

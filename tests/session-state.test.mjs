@@ -7,13 +7,13 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { TurboSessionStore, isSessionId, parseMode } from '../lib/index.js'
+import { TurboSessionStore, isSessionId, parseGear, parseMode } from '../lib/index.js'
 
 const SESSION = 'session-11111111-2222-3333-4444-555555555555'
 
 test('a new Session reads as Turbo OFF with revision 0', () => {
   const store = new TurboSessionStore()
-  assert.deepEqual(store.get(SESSION), { sessionId: SESSION, mode: 'default', revision: 0, updatedAt: 0 })
+  assert.deepEqual(store.get(SESSION), { sessionId: SESSION, mode: 'default', gear: 'fast', revision: 0, updatedAt: 0 })
 })
 
 test('an accepted write bumps the revision and keeps one record per Session', () => {
@@ -21,6 +21,7 @@ test('an accepted write bumps the revision and keeps one record per Session', ()
   const first = store.set(SESSION, 'turbo')
   assert.equal(first.changed, true)
   assert.equal(first.state.mode, 'turbo')
+  assert.equal(first.state.gear, 'fast')
   assert.equal(first.state.revision, 1)
   assert.equal(first.state.updatedAt, 1000)
 
@@ -48,6 +49,18 @@ test('re-selecting the current mode is idempotent and does not bump the revision
   assert.equal(again.changed, false)
   assert.equal(again.conflict, undefined)
   assert.equal(again.state.revision, on.state.revision)
+})
+
+test('gear changes are persisted, revision-guarded and preserved while off', () => {
+  const store = new TurboSessionStore({ now: () => 1000 })
+  const max = store.set(SESSION, 'turbo', 0, 'max')
+  assert.equal(max.state.gear, 'max')
+  assert.equal(max.state.revision, 1)
+  const off = store.set(SESSION, 'default', 1)
+  assert.equal(off.state.gear, 'max')
+  const stale = store.set(SESSION, 'turbo', 1, 'fast')
+  assert.equal(stale.conflict, true)
+  assert.equal(stale.state.gear, 'max')
 })
 
 test('mode is isolated per Session', () => {
@@ -83,11 +96,28 @@ test('state survives a reload and a corrupt document starts empty', () => {
 
     // A truncated document must not take the profile down.
     const fs = readFileSync(path, 'utf8')
-    assert.match(fs, /"version": 1/)
+    assert.match(fs, /"version": 2/)
     rmSync(path)
     writeFileSync(path, '{ not json', 'utf8')
     const recovered = new TurboSessionStore({ path })
     assert.equal(recovered.get(SESSION).mode, 'default')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('version 1 state migrates to the Fast gear', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-turbo-v1-'))
+  try {
+    const path = join(dir, 'state.json')
+    writeFileSync(path, JSON.stringify({
+      version: 1,
+      sessions: { [SESSION]: { mode: 'turbo', revision: 3, updatedAt: 100 } },
+    }), 'utf8')
+    const store = new TurboSessionStore({ path })
+    assert.equal(store.get(SESSION).mode, 'turbo')
+    assert.equal(store.get(SESSION).gear, 'fast')
+    assert.equal(store.get(SESSION).revision, 3)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -117,4 +147,7 @@ test('wire validation accepts only real session tokens and modes', () => {
   assert.equal(parseMode('default'), 'default')
   assert.equal(parseMode('TURBO'), undefined)
   assert.equal(parseMode(true), undefined)
+  assert.equal(parseGear('fast'), 'fast')
+  assert.equal(parseGear('max'), 'max')
+  assert.equal(parseGear('MAX'), undefined)
 })

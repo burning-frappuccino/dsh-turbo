@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 — 2026-10-23
+
+- Adds a draggable two-position Fast/Max gear control while preserving the Turbo OFF fallback.
+- Fast keeps the existing low-cost direct path; Max permits extra token/tool spend for parallel context gathering and independent work.
+- Makes the gear Host-authoritative, revision-guarded and persistent per session; version 1 state migrates to Fast automatically.
+- Adds separate Fast/Max reasoning-effort configuration and records the selected gear in execution evidence.
+- Expands the suite from 40 to 44 automated tests, including gear migration, conflicts, Max policy rendering and request behavior.
+
 ## 0.1.4 — 2026-10-23
 
 First public release.

@@ -6,7 +6,7 @@
  */
 
 /** Plugin semver, mirrored from package.json. */
-export const PLUGIN_VERSION = '0.1.4'
+export const PLUGIN_VERSION = '0.2.0'
 
 /** Stable machine name (package name, loader row id and client entry id). */
 export const PLUGIN_NAME = 'dsh-turbo'

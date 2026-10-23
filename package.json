@@ -1,8 +1,8 @@
 {
   "name": "dsh-turbo",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "type": "module",
-  "description": "DSH Turbo — a native session-scoped low-latency execution mode for DeepSeek Harness (Host runtime policy + Web UI toggle).",
+  "description": "DSH Turbo — native session-scoped Fast/Max execution gears for DeepSeek Harness (Host runtime policy + Web UI slider).",
   "license": "MIT",
   "author": "burning-frappuccino",
   "homepage": "https://github.com/burning-frappuccino/dsh-turbo#readme",

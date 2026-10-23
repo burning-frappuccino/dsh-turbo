@@ -145,7 +145,7 @@ export class RuntimeAdapter {
     this.#caps.sessionMetrics = true
 
     // ── 4. Optional request-level reasoning effort ───────────────────────────
-    if (this.#config.reasoningEffort !== 'inherit') {
+    if (this.#config.reasoningEffort !== 'inherit' || this.#config.maxReasoningEffort !== 'inherit') {
       const attach = (agent: AgentLike | undefined): void => {
         try {
           this.#attachEffort(agent)
@@ -209,7 +209,9 @@ export class RuntimeAdapter {
 
   /** What is really in effect, in the exact words the client shows. */
   capabilities(): readonly TurboCapability[] {
-    const effort = this.#config.reasoningEffort
+    const fastEffort = this.#config.reasoningEffort
+    const maxEffort = this.#config.maxReasoningEffort
+    const effortEnabled = fastEffort !== 'inherit' || maxEffort !== 'inherit'
     return [
       {
         id: 'prompt-policy',
@@ -239,18 +241,18 @@ export class RuntimeAdapter {
       },
       {
         id: 'reasoning-effort',
-        state: effort === 'inherit' ? 'off' : this.#caps.reasoningEffort ? 'applied' : 'off',
-        detail: effort === 'inherit'
-          ? 'Model route untouched (config reasoningEffort: inherit).'
+        state: !effortEnabled ? 'off' : this.#caps.reasoningEffort ? 'applied' : 'off',
+        detail: !effortEnabled
+          ? 'Model route untouched (both gear efforts inherit the selected route).'
           : this.#caps.reasoningEffort
-            ? `Requests carried reasoningEffort "${effort}" (observed in request/header).`
+            ? `Turbo requests carried the selected gear effort (Fast: "${fastEffort}", Max: "${maxEffort}") in request/header.`
             : this.#caps.effortError !== undefined
-              ? `The route refused reasoningEffort "${effort}" (${this.#caps.effortError}); Turbo kept the turn alive and left the route untouched.`
+              ? `The route refused a selected gear effort (${this.#caps.effortError}); Turbo kept the turn alive and left the route untouched.`
               : this.#caps.effortUnavailable
-                ? `Configured for reasoningEffort "${effort}", but no Agent context was reachable.`
+                ? `Configured for Fast "${fastEffort}" / Max "${maxEffort}", but no Agent context was reachable.`
                 : this.#caps.observedEffort !== undefined
-                  ? `Configured for reasoningEffort "${effort}", but the model route still resolved "${this.#caps.observedEffort}" — another listener owns that field.`
-                  : `Configured for reasoningEffort "${effort}"; no Turbo request has been observed yet in this process.`,
+                  ? `The selected gear effort did not reach the route; it resolved "${this.#caps.observedEffort}" instead.`
+                  : `Configured for Fast "${fastEffort}" / Max "${maxEffort}"; no Turbo request has been observed yet.`,
       },
       {
         id: 'optional-stages',
@@ -280,8 +282,10 @@ export class RuntimeAdapter {
   /** Render the section text for one agent (empty string = contribute nothing). */
   #promptFor(agent: AgentLike | undefined): string {
     const sessionId = agent?.session?.id ?? agent?.id
-    if (sessionId === undefined || this.#store.get(sessionId).mode !== 'turbo') return ''
-    return renderTurboPolicy()
+    if (sessionId === undefined) return ''
+    const state = this.#store.get(sessionId)
+    if (state.mode !== 'turbo') return ''
+    return renderTurboPolicy(state.gear)
   }
 
   #onPreStep(
@@ -298,19 +302,20 @@ export class RuntimeAdapter {
     this.#caps.preStepHook = true
     if (state.mode === 'turbo') this.#metrics.countStep(sessionId, turn)
 
-    const policy = policyFor(state.mode)
+    const policy = policyFor(state.mode, state.gear)
     this.#evidence.write({
       event: 'pre-step',
       session: sessionId,
       turn,
       step: typeof payload.step === 'number' ? payload.step : null,
       mode: state.mode,
+      gear: state.gear,
       revision: state.revision,
       policy,
       promptSection: this.#caps.promptSection ? 'applied' : 'unavailable',
       // What the last request actually carried, not what this plugin asked for.
       reasoningEffort: this.#caps.observedEffort ?? null,
-      reasoningEffortConfigured: this.#config.reasoningEffort,
+      reasoningEffortConfigured: this.#effortFor(state.gear),
     })
   }
 
@@ -340,17 +345,19 @@ export class RuntimeAdapter {
       // not what this plugin asked for.
       const header = data['header'] as { config?: { reasoningEffort?: unknown } } | undefined
       const observed = header?.config?.reasoningEffort
-      if (this.#store.get(sessionId).mode !== 'turbo') return
-      if (this.#config.reasoningEffort === 'inherit') return
+      const state = this.#store.get(sessionId)
+      if (state.mode !== 'turbo') return
+      const expected = this.#effortFor(state.gear)
+      if (expected === 'inherit') return
       const value = typeof observed === 'string' ? observed : undefined
       this.#caps.observedEffort = value
-      const matches = value === this.#config.reasoningEffort
+      const matches = value === expected
       this.#caps.reasoningEffort = matches
       if (!matches && !this.#effortMismatchReported) {
         this.#effortMismatchReported = true
         this.#ctx.logger?.warn(
           'dsh-turbo: reasoningEffort "%s" was configured but the request header carries "%s"; another agent/request listener owns that field',
-          this.#config.reasoningEffort,
+          expected,
           value ?? '(none)',
         )
       }
@@ -384,7 +391,6 @@ export class RuntimeAdapter {
     }
     if (this.#effortHooks.has(agent.id)) return
     const sessionId = agent.session?.id ?? agent.id
-    const effort = this.#config.reasoningEffort
     // `prepend: true` is load-bearing. The shipped model-selection listener
     // (`@deepseek-ai/dsh-agent`) sits downstream of every plugin and *strips*
     // any inherited `reasoningEffort` before re-applying the selected route's
@@ -395,7 +401,10 @@ export class RuntimeAdapter {
       next: () => Promise<Record<string, unknown>>,
     ) => {
       const config = await next()
-      if (this.#store.get(sessionId).mode !== 'turbo') return config
+      const state = this.#store.get(sessionId)
+      if (state.mode !== 'turbo') return config
+      const effort = this.#effortFor(state.gear)
+      if (effort === 'inherit') return config
       return { ...config, reasoningEffort: effort }
     }) as never, { prepend: true })
 
@@ -445,10 +454,15 @@ export class RuntimeAdapter {
     this.#evidence.write({
       event: 'effort-disabled',
       session: agentId,
-      configured: this.#config.reasoningEffort,
+      configured: `${this.#config.reasoningEffort}/${this.#config.maxReasoningEffort}`,
       reason,
     })
     this.#effortHooks.get(agentId)?.()
+  }
+
+  /** Resolve the request-level lever for the selected Turbo gear. */
+  #effortFor(gear: 'fast' | 'max'): TurboConfig['reasoningEffort'] {
+    return gear === 'max' ? this.#config.maxReasoningEffort : this.#config.reasoningEffort
   }
 }
 

@@ -13,14 +13,21 @@
  * @module dsh-turbo/host/session-store
  */
 
-import type { TurboMode, TurboSessionState } from '../shared/types.js'
+import type { TurboGear, TurboMode, TurboSessionState } from '../shared/types.js'
 import { JsonFile } from './json-file.js'
 
 /** Persisted document shape. `version` gates future migrations. */
-interface StateDocument {
+interface StateDocumentV1 {
   version: 1
   sessions: Record<string, { mode: TurboMode; revision: number; updatedAt: number }>
 }
+
+interface StateDocumentV2 {
+  version: 2
+  sessions: Record<string, { mode: TurboMode; gear: TurboGear; revision: number; updatedAt: number }>
+}
+
+type StateDocument = StateDocumentV1 | StateDocumentV2
 
 export interface SetOutcome {
   /** Whether the request changed anything. */
@@ -36,6 +43,8 @@ export interface SessionStoreOptions {
   readonly path?: string
   /** Mode a Session with no written record reads as. Default `default`. */
   readonly defaultMode?: TurboMode
+  /** Gear a Session with no written record reads as. Default `fast`. */
+  readonly defaultGear?: TurboGear
   /** Entries untouched for this long are dropped on prune. Default 30 days. */
   readonly ttlMs?: number
   /** Hard cap on retained Sessions. Default 2000. */
@@ -45,11 +54,16 @@ export interface SessionStoreOptions {
   readonly onError?: (error: unknown) => void
 }
 
-const DEFAULT_RECORD = Object.freeze({ mode: 'default' as TurboMode, revision: 0, updatedAt: 0 })
+const DEFAULT_RECORD = Object.freeze({ mode: 'default' as TurboMode, gear: 'fast' as TurboGear, revision: 0, updatedAt: 0 })
 
 /** Validate a wire value before it can reach the store. */
 export function parseMode(value: unknown): TurboMode | undefined {
   return value === 'turbo' || value === 'default' ? value : undefined
+}
+
+/** Validate a gear received from the browser or a persisted document. */
+export function parseGear(value: unknown): TurboGear | undefined {
+  return value === 'fast' || value === 'max' ? value : undefined
 }
 
 /** Session ids are harness-minted; reject anything that is not a plain token. */
@@ -58,9 +72,10 @@ export function isSessionId(value: unknown): value is string {
 }
 
 export class TurboSessionStore {
-  readonly #entries = new Map<string, { mode: TurboMode; revision: number; updatedAt: number }>()
+  readonly #entries = new Map<string, { mode: TurboMode; gear: TurboGear; revision: number; updatedAt: number }>()
   readonly #file: JsonFile<StateDocument> | undefined
   readonly #defaultMode: TurboMode
+  readonly #defaultGear: TurboGear
   readonly #ttlMs: number
   readonly #maxSessions: number
   readonly #now: () => number
@@ -71,18 +86,22 @@ export class TurboSessionStore {
     this.#maxSessions = options.maxSessions ?? 2000
     this.#now = options.now ?? Date.now
     this.#defaultMode = options.defaultMode ?? DEFAULT_RECORD.mode
+    this.#defaultGear = options.defaultGear ?? DEFAULT_RECORD.gear
     this.#file = options.path === undefined ? undefined : new JsonFile<StateDocument>(options.path, {
       onError: options.onError,
     })
     const loaded = this.#file?.load()
-    if (loaded !== undefined && loaded.version === 1 && typeof loaded.sessions === 'object' && loaded.sessions !== null) {
+    if (loaded !== undefined && (loaded.version === 1 || loaded.version === 2) && typeof loaded.sessions === 'object' && loaded.sessions !== null) {
       for (const [sessionId, record] of Object.entries(loaded.sessions)) {
         if (!isSessionId(sessionId)) continue
         const mode = parseMode(record?.mode)
         if (mode === undefined) continue
+        const gear = loaded.version === 2
+          ? (parseGear((record as { gear?: unknown }).gear) ?? 'fast')
+          : 'fast'
         const revision = Number.isInteger(record.revision) && record.revision > 0 ? record.revision : 0
         const updatedAt = Number.isFinite(record.updatedAt) && record.updatedAt > 0 ? record.updatedAt : 0
-        this.#entries.set(sessionId, { mode, revision, updatedAt })
+        this.#entries.set(sessionId, { mode, gear, revision, updatedAt })
       }
     }
   }
@@ -99,6 +118,7 @@ export class TurboSessionStore {
       return {
         sessionId,
         mode: this.#defaultMode,
+        gear: this.#defaultGear,
         revision: 0,
         updatedAt: 0,
       }
@@ -106,6 +126,7 @@ export class TurboSessionStore {
     return {
       sessionId,
       mode: record.mode,
+      gear: record.gear,
       revision: record.revision,
       updatedAt: record.updatedAt,
     }
@@ -119,18 +140,20 @@ export class TurboSessionStore {
    * @param expectedRevision - the revision the caller observed, or undefined
    *   for an unconditional write.
    */
-  set(sessionId: string, mode: TurboMode, expectedRevision?: number): SetOutcome {
+  set(sessionId: string, mode: TurboMode, expectedRevision?: number, gear?: TurboGear): SetOutcome {
     const current = this.get(sessionId)
     if (expectedRevision !== undefined && expectedRevision !== current.revision) {
       return { changed: false, state: current, conflict: true }
     }
-    if (current.mode === mode) {
+    const nextGear = gear ?? current.gear
+    if (current.mode === mode && current.gear === nextGear) {
       // Idempotent: keep the revision stable so a no-op click cannot invalidate
       // a concurrent tab's expected revision.
       return { changed: false, state: current }
     }
     const next = {
       mode,
+      gear: nextGear,
       revision: current.revision + 1,
       updatedAt: this.#now(),
     }
@@ -178,9 +201,9 @@ export class TurboSessionStore {
 
   #persist(): void {
     if (this.#file === undefined) return
-    const sessions: StateDocument['sessions'] = {}
+    const sessions: StateDocumentV2['sessions'] = {}
     for (const [sessionId, record] of this.#entries) sessions[sessionId] = { ...record }
-    this.#file.save({ version: 1, sessions })
+    this.#file.save({ version: 2, sessions })
   }
 
   #emit(state: TurboSessionState, cause: string): void {

@@ -14,6 +14,8 @@
  * @module dsh-turbo/prompts/turbo-policy
  */
 
+import type { TurboGear } from '../shared/types.js'
+
 /** Stable section name; scoped registrations shadow by name. */
 export const TURBO_SECTION_NAME = 'turbo:execution-policy'
 
@@ -28,8 +30,8 @@ export const TURBO_POLICY_MARKER = 'TURBO EXECUTION MODE'
  * v2 keeps the latency goal but names the *cheapest proof* as part of finishing,
  * and makes the verification disclosure a concrete line instead of a tone.
  */
-export function renderTurboPolicy(): string {
-  return [
+export function renderTurboPolicy(gear: TurboGear = 'fast'): string {
+  const base = [
     TURBO_POLICY_MARKER,
     '',
     'Optimize for minimum wall-clock completion time.',
@@ -47,5 +49,16 @@ export function renderTurboPolicy(): string {
     'Deliver the result as soon as it is complete. End the reply with one line stating what you actually ran: `Verified: <the command or check>` or `Verified: none`. Never describe code as tested when no test ran.',
     '',
     'Mandatory permissions, approvals, sandbox rules, and checks are never skipped for speed.',
-  ].join('\n')
+  ]
+  if (gear === 'max') {
+    base.splice(4, 0,
+      'MAX GEAR: lower wall-clock latency is worth extra token and tool budget.',
+      '',
+      'Gather all likely-needed context up front. Launch every independent read, search, tool call, and available subagent in the same turn instead of serially. Parallel duplicate exploration is allowed only when the result can be checked cheaply; never duplicate a mutating or non-idempotent action.',
+      '',
+      'Keep dependent operations ordered. Use the extra breadth to finish sooner, not to add prose or ceremonial review.',
+      '',
+    )
+  }
+  return base.join('\n')
 }

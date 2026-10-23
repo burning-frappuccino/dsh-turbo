@@ -137,7 +137,7 @@ test('apply degrades without a slot service instead of throwing', () => {
 
 const okBody = (overrides = {}) => ({
   ok: true,
-  state: { sessionId: 'session-abc', mode: 'turbo', revision: 2, updatedAt: 10 },
+  state: { sessionId: 'session-abc', mode: 'turbo', gear: 'fast', revision: 2, updatedAt: 10 },
   capabilities: [{ id: 'prompt-policy', state: 'applied', detail: 'x' }],
   metrics: {
     turns: 1,
@@ -175,10 +175,26 @@ test('a read returns the Host record and its capabilities', async () => {
   const result = await controller.read()
   assert.equal(result.kind, 'ok')
   assert.equal(result.view.state.mode, 'turbo')
+  assert.equal(result.view.state.gear, 'fast')
   assert.equal(result.view.metrics.avgLatencyMs, 1200)
   assert.equal(calls.length, 1)
   assert.match(calls[0].url, /^\/api\/dsh-turbo\/state\?sessionId=session-abc$/)
   assert.equal(calls[0].init.method, 'GET')
+})
+
+test('a write can select the Max gear', async () => {
+  const { TurboController } = loadPluginExports()
+  const calls = []
+  const controller = new TurboController('session-abc', {
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init })
+      return jsonResponse(okBody({ state: { sessionId: 'session-abc', mode: 'turbo', gear: 'max', revision: 3, updatedAt: 11 } }))
+    },
+  })
+  const result = await controller.write('turbo', 2, 'max')
+  assert.equal(result.kind, 'ok')
+  assert.equal(result.view.state.gear, 'max')
+  assert.equal(JSON.parse(calls[0].init.body).gear, 'max')
 })
 
 test('a write sends the observed revision and returns the confirmed state', async () => {
@@ -211,7 +227,7 @@ test('a 409 conflict is surfaced with the authoritative state, not retried', asy
         ok: false,
         code: 'conflict',
         message: 'changed elsewhere',
-        state: { sessionId: 'session-abc', mode: 'default', revision: 7, updatedAt: 5 },
+        state: { sessionId: 'session-abc', mode: 'default', gear: 'max', revision: 7, updatedAt: 5 },
       }, 409)
     },
   })

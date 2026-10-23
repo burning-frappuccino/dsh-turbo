@@ -23,7 +23,7 @@ import { isTurbo } from '../shared/policies.js'
 import { PLUGIN_NAME, PLUGIN_VERSION } from '../version.js'
 import { EvidenceLog } from './evidence.js'
 import { TurboMetrics } from './metrics.js'
-import { TurboSessionStore, isSessionId, parseMode } from './session-store.js'
+import { TurboSessionStore, isSessionId, parseGear, parseMode } from './session-store.js'
 import { RuntimeAdapter } from './runtime-adapter.js'
 import type { Disposer, HttpRoute, TurboContext } from './cordis-surface.js'
 
@@ -58,6 +58,7 @@ const DEFAULTS: TurboConfig = {
   // adapter accepts only `off | low | high | max`, so defaulting to `minimal`
   // would fail every Turbo turn with UNSUPPORTED_REASONING_EFFORT.
   reasoningEffort: 'inherit',
+  maxReasoningEffort: 'low',
   evidenceLog: true,
   storageDir: 'dsh-turbo',
   defaultMode: 'default',
@@ -78,7 +79,7 @@ export function resolveConfig(raw: unknown): TurboConfig {
   if (raw === undefined || raw === null) return DEFAULTS
   if (typeof raw !== 'object') throw new Error('dsh-turbo: config must be an object')
   const input = raw as Record<string, unknown>
-  const known = new Set(['sectionOrder', 'reasoningEffort', 'evidenceLog', 'storageDir', 'defaultMode'])
+  const known = new Set(['sectionOrder', 'reasoningEffort', 'maxReasoningEffort', 'evidenceLog', 'storageDir', 'defaultMode'])
   const unknown = Object.keys(input).filter((key) => !known.has(key))
   if (unknown.length > 0) {
     throw new Error(`dsh-turbo: unknown config key(s) ${unknown.join(', ')} — accepted keys are ${[...known].join(', ')}`)
@@ -90,6 +91,10 @@ export function resolveConfig(raw: unknown): TurboConfig {
   const reasoningEffort = input.reasoningEffort ?? DEFAULTS.reasoningEffort
   if (typeof reasoningEffort !== 'string' || !EFFORTS.has(reasoningEffort)) {
     throw new Error(`dsh-turbo: config reasoningEffort must be one of ${[...EFFORTS].join(', ')}`)
+  }
+  const maxReasoningEffort = input.maxReasoningEffort ?? DEFAULTS.maxReasoningEffort
+  if (typeof maxReasoningEffort !== 'string' || !EFFORTS.has(maxReasoningEffort)) {
+    throw new Error(`dsh-turbo: config maxReasoningEffort must be one of ${[...EFFORTS].join(', ')}`)
   }
   const evidenceLog = input.evidenceLog ?? DEFAULTS.evidenceLog
   if (typeof evidenceLog !== 'boolean') throw new Error('dsh-turbo: config evidenceLog must be a boolean')
@@ -104,6 +109,7 @@ export function resolveConfig(raw: unknown): TurboConfig {
   return {
     sectionOrder,
     reasoningEffort: reasoningEffort as TurboConfig['reasoningEffort'],
+    maxReasoningEffort: maxReasoningEffort as TurboConfig['maxReasoningEffort'],
     evidenceLog,
     storageDir,
     defaultMode: defaultMode as TurboConfig['defaultMode'],
@@ -158,6 +164,7 @@ export function apply(ctx: TurboContext, rawConfig?: unknown): void {
       event: 'mode-change',
       session: state.sessionId,
       mode: state.mode,
+      gear: state.gear,
       revision: state.revision,
       turbo: isTurbo(state.mode),
     })
@@ -285,6 +292,7 @@ export function apply(ctx: TurboContext, rawConfig?: unknown): void {
       const input = body as Record<string, unknown>
       const sessionId = input.sessionId
       const mode = parseMode(input.mode)
+      const gear = input.gear === undefined ? undefined : parseGear(input.gear)
       if (!isSessionId(sessionId)) {
         sendJson(response, 400, {
           ok: false,
@@ -301,6 +309,14 @@ export function apply(ctx: TurboContext, rawConfig?: unknown): void {
         } satisfies TurboStateReply)
         return
       }
+      if (input.gear !== undefined && gear === undefined) {
+        sendJson(response, 400, {
+          ok: false,
+          code: 'invalid',
+          message: 'gear must be "fast" or "max" when present',
+        } satisfies TurboStateReply)
+        return
+      }
       const expectedRevision = input.expectedRevision
       if (expectedRevision !== undefined && (typeof expectedRevision !== 'number' || !Number.isInteger(expectedRevision) || expectedRevision < 0)) {
         sendJson(response, 400, {
@@ -311,7 +327,7 @@ export function apply(ctx: TurboContext, rawConfig?: unknown): void {
         return
       }
 
-      const outcome = store.set(sessionId, mode, expectedRevision)
+      const outcome = store.set(sessionId, mode, expectedRevision, gear)
       if (outcome.conflict === true) {
         sendJson(response, 409, {
           ok: false,
@@ -329,7 +345,7 @@ export function apply(ctx: TurboContext, rawConfig?: unknown): void {
         live: live(sessionId),
         plugin: { name: PLUGIN_NAME, version: PLUGIN_VERSION },
       } satisfies TurboStateReply)
-      log?.info('dsh-turbo: session %s mode=%s revision=%d', sessionId, outcome.state.mode, outcome.state.revision)
+      log?.info('dsh-turbo: session %s mode=%s gear=%s revision=%d', sessionId, outcome.state.mode, outcome.state.gear, outcome.state.revision)
     },
   }
 
@@ -394,10 +410,11 @@ export function apply(ctx: TurboContext, rawConfig?: unknown): void {
   }, 'dsh-turbo: lifetime')
 
   log?.info(
-    'dsh-turbo %s: loaded (sectionOrder=%d, reasoningEffort=%s, evidence=%s)',
+    'dsh-turbo %s: loaded (sectionOrder=%d, fastEffort=%s, maxEffort=%s, evidence=%s)',
     PLUGIN_VERSION,
     config.sectionOrder,
     config.reasoningEffort,
+    config.maxReasoningEffort,
     evidence.enabled ? (evidence.path ?? '') : 'off',
   )
 }

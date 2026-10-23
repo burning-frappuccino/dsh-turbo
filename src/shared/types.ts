@@ -12,6 +12,9 @@
 /** The two execution modes of one Session. */
 export type TurboMode = 'default' | 'turbo'
 
+/** The two Turbo policies exposed by the Web slider. */
+export type TurboGear = 'fast' | 'max'
+
 /**
  * The Host-authoritative record for one Session.
  *
@@ -22,6 +25,8 @@ export type TurboMode = 'default' | 'turbo'
 export interface TurboSessionState {
   readonly sessionId: string
   readonly mode: TurboMode
+  /** Selected Turbo policy. Preserved while Turbo is OFF. */
+  readonly gear: TurboGear
   /** Monotonic per Session; 0 means "never written". */
   readonly revision: number
   /** Epoch milliseconds of the last accepted write; 0 for the default record. */
@@ -103,8 +108,10 @@ export interface TurboHealthReply {
 export interface TurboConfig {
   /** Prompt section order. Default 700 (unowned gap in DSH SECTION_ORDERS). */
   readonly sectionOrder: number
-  /** Request-level reasoning effort while Turbo is ON. Default 'minimal'. */
-  readonly reasoningEffort: 'inherit' | 'minimal' | 'low' | 'medium' | 'high'
+  /** Request-level reasoning effort for the Fast gear. */
+  readonly reasoningEffort: 'inherit' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'max'
+  /** Request-level reasoning effort for the Max gear. */
+  readonly maxReasoningEffort: 'inherit' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'max'
   /** Append applied-policy evidence lines to storageDir/evidence.jsonl. */
   readonly evidenceLog: boolean
   /** Subdirectory of $DSH_HOME/storages for state, metrics and evidence. */

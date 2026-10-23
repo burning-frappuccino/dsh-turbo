@@ -5,7 +5,7 @@
 ## 中文说明
 
 DSH Turbo 是一个面向 **DeepSeek Harness** 的原生插件。它在输入区提供按会话生效的
-Turbo 开关，并在 Host 运行阶段应用可撤销的执行策略，用来减少不必要的步骤和等待时间。
+Turbo 开关与两档滑块，并在 Host 运行阶段应用可撤销的执行策略，用来减少不必要的步骤和等待时间。
 
 - 已在 Windows 桌面版 **DSH `0.2.0-rc.2`**（build `04f392c9`）实测。
 - 每个会话独立保存开关状态；新会话默认关闭 Turbo。
@@ -17,10 +17,11 @@ Turbo 开关，并在 Host 运行阶段应用可撤销的执行策略，用来�
 
 | 功能 | 作用 |
 |---|---|
-| 原生 Web UI 开关 | 在输入框旁显示 `Turbo` / `⚡ Turbo ON`，只影响当前会话。 |
+| 原生 Web UI 开关与滑块 | `Turbo` 可关闭；开启后可拖动选择 `极速` 或 `极限`，只影响当前会话。 |
 | Host 权威状态 | 状态保存在 Host，多个标签页发生冲突时以 Host 记录为准。 |
 | 运行期策略 | 通过 DSH 支持的提示词与请求生命周期接口影响下一次执行。 |
 | 推理强度控制 | 可在 Turbo 开启时使用更低的 `reasoningEffort`；模型路由拒绝时会安全撤销并重试。 |
+| 极限并行策略 | 愿意多花 Token/工具预算时，一次发出互不依赖的读取、搜索、工具和可用子任务，压缩等待时间。写操作不会重复并发。 |
 | 可观测数据 | 记录轮次耗时、模型步骤、工具调用及是否运行过验证命令。 |
 | 完整回退 | 关闭或卸载插件后恢复默认执行路径，不修改 DSH 上游源代码。 |
 
@@ -62,9 +63,11 @@ powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop
 ### 使用方法
 
 1. 打开任意会话，在输入框旁点击 **Turbo**。
-2. 显示 `⚡ Turbo ON` 表示 Host 已确认本会话开启。
+2. 开启后拖动两档滑块：`极速` 控制 Token 成本，`极限` 允许更多并行开销来换取更短等待。
 3. 点击旁边的 `?` 可以看到效果说明和同题测试建议。
-4. 再次点击即可恢复默认模式；正在执行的请求不会被中途改写，新模式从下一次组装请求开始生效。
+4. 再次点击 Turbo 即可恢复默认模式；正在执行的请求不会被中途改写，新模式从下一次组装请求开始生效。
+
+`极限` 只会加速能并行拆分的任务，不保证所有任务都更快；串行依赖、网络瓶颈和模型排队仍可能成为限制。
 
 健康检查：
 
@@ -80,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profile desktop
 
 ### 测试与资料
 
-- 自动测试：**40 项全部通过**。
+- 自动测试：**44 项全部通过**。
 - [`PERFORMANCE.md`](./PERFORMANCE.md)：性能测试、用户同题对照与局限说明。
 - [`compatibility-report.md`](./compatibility-report.md)：DSH API、Hook 和兼容性核查。
 - [`STATUS.md`](./STATUS.md)：开发状态与文件清单。
@@ -99,7 +102,7 @@ powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profile desktop
 ## English documentation
 
 Session-scoped low-latency execution mode for **DeepSeek Harness**, as a native
-plugin: a Web UI toggle in the composer, Host-authoritative per-session state,
+plugin: a Web UI toggle with Fast/Max gears in the composer, Host-authoritative per-session state,
 and a real runtime policy applied at the harness' own lifecycle boundary.
 
 - Tested against **DSH `0.2.0-rc.2`** (desktop build `04f392c9`) on Windows.
@@ -131,10 +134,11 @@ the machine-readable sample and the broader benchmark are in
 
 | Mechanism | Where | Effect |
 |---|---|---|
-| Prompt policy | `ctx.systemPrompt.section({ name: 'turbo:execution-policy', order: 700, text })` | The policy text renders **only** for sessions in Turbo; `''` otherwise. |
-| Per-step policy stamp | `agent/pre-step` waterfall | Records the effective mode per step and writes one evidence line; it never blocks a step. |
+| Prompt policy | `ctx.systemPrompt.section({ name: 'turbo:execution-policy', order: 700, text })` | Renders the selected Fast or Max policy **only** for sessions in Turbo; `''` otherwise. |
+| Per-step policy stamp | `agent/pre-step` waterfall | Records the effective mode and gear per step and writes one evidence line; it never blocks a step. |
 | Turn/tool metrics | `session/event` (`turn/start`, `turn/end`, `tool/call`) | Wall-clock turn time, steps, tool calls, whether a verification command actually ran. |
-| Reasoning effort | agent-scoped `agent/request` waterfall, registered `prepend` | Turbo ON rewrites the request's `reasoningEffort`; Turbo OFF returns the upstream request unchanged. An id the route refuses disables the lever and retries the turn. |
+| Reasoning effort | agent-scoped `agent/request` waterfall, registered `prepend` | Each gear can select its own `reasoningEffort`; Turbo OFF returns the upstream request unchanged. A refused id disables the lever and retries the turn. |
+| Max parallel policy | prompt policy | Spends extra token/tool budget on independent reads, searches, tools and available subagents in the same turn. Mutating operations are never duplicated. |
 | Delivery discipline | prompt policy | Requires the reply to state whether the result was verified, and forbids claiming tests passed when none ran. |
 
 It does **not**: block tools by name/argument, replace the agent loop, touch
@@ -144,7 +148,9 @@ does not exist, the UI says `unavailable` instead of pretending.
 ### The toggle
 
 - OFF → `Turbo`
-- ON → `⚡ Turbo ON`
+- ON / Fast → `⚡ 极速`
+- ON / Max → `🔥 极限`
+- drag the two-position slider to change gear
 - in flight → `Switching…`
 - bridge unreachable → `Turbo unavailable`
 
@@ -167,7 +173,7 @@ git clone https://github.com/burning-frappuccino/dsh-turbo.git
 cd C:\path\to\dsh-turbo
 pnpm install --frozen-lockfile
 pnpm run build     # writes lib/index.js + lib/client.js
-pnpm test          # 40 tests: state, policy, toggle, compatibility
+pnpm test          # 44 tests: state, gears, policy, toggle, compatibility
 ```
 
 `lib/` is generated; the package ships it so consumers do not need a toolchain.
@@ -194,6 +200,7 @@ in `dsh.profile.bundles` (the bundle patch then inserts the row):
   config:
     sectionOrder: 700
     reasoningEffort: inherit
+    maxReasoningEffort: low
     evidenceLog: true
     storageDir: dsh-turbo
     defaultMode: default
@@ -290,6 +297,7 @@ whether verification happened, because a checker cannot read intent.
 |---|---|---|
 | `sectionOrder` | `700` | Prompt section placement (unowned gap between plan/team policy and tool guidance). |
 | `reasoningEffort` | `inherit` | Request-level reasoning while Turbo is ON: `off`/`minimal`/`low`/`medium`/`high`/`max`, or `inherit` to leave the route alone. The **route decides** what exists — the shipped DeepSeek Messages adapter accepts only `off`/`low`/`high`/`max`, so `minimal` is refused. A refusal disables the lever for that Agent and retries the turn rather than failing it, and the capability row says so. |
+| `maxReasoningEffort` | `low` | Request-level effort for the Max gear. Max spends more through parallel breadth, while keeping per-request deliberation latency low. |
 | `evidenceLog` | `true` | Append one JSON line per applied step to `evidence.jsonl`. |
 | `storageDir` | `dsh-turbo` | Subdirectory of `$DSH_HOME/storages`. Remove `evidenceLog` to go without a log. |
 | `defaultMode` | `default` | Mode a never-toggled Session reads as. `turbo` makes Turbo the deployment default; the benchmark harness uses it to pick an arm. |

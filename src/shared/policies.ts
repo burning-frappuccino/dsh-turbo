@@ -9,7 +9,7 @@
  * @module dsh-turbo/shared/policies
  */
 
-import type { TurboMode } from './types.js'
+import type { TurboGear, TurboMode } from './types.js'
 
 /** One executable policy set. */
 export interface ExecutionPolicy {
@@ -26,6 +26,8 @@ export interface ExecutionPolicy {
   readonly skipOptionalTests: boolean
   /** Prefer the shortest path that finishes the task. */
   readonly preferLowLatency: boolean
+  /** Spend extra tool/token budget on independent work when it can reduce wall time. */
+  readonly preferAggressiveParallelism: boolean
   /** Never removable: permissions, approval, sandbox, and necessary checks. */
   readonly preserveMandatoryChecks: true
 }
@@ -37,7 +39,14 @@ export const TURBO_POLICY: ExecutionPolicy = Object.freeze({
   skipOptionalReview: true,
   skipOptionalTests: true,
   preferLowLatency: true,
+  preferAggressiveParallelism: false,
   preserveMandatoryChecks: true,
+})
+
+/** Turbo Max: buy lower wall time with broader, parallel execution. */
+export const TURBO_MAX_POLICY: ExecutionPolicy = Object.freeze({
+  ...TURBO_POLICY,
+  preferAggressiveParallelism: true,
 })
 
 /**
@@ -53,12 +62,14 @@ export const DEFAULT_POLICY: ExecutionPolicy = Object.freeze({
   skipOptionalReview: false,
   skipOptionalTests: false,
   preferLowLatency: false,
+  preferAggressiveParallelism: false,
   preserveMandatoryChecks: true,
 })
 
 /** Resolve the policy for a mode. */
-export function policyFor(mode: TurboMode): ExecutionPolicy {
-  return mode === 'turbo' ? TURBO_POLICY : DEFAULT_POLICY
+export function policyFor(mode: TurboMode, gear: TurboGear = 'fast'): ExecutionPolicy {
+  if (mode !== 'turbo') return DEFAULT_POLICY
+  return gear === 'max' ? TURBO_MAX_POLICY : TURBO_POLICY
 }
 
 /**

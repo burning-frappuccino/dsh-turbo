@@ -21,7 +21,7 @@
  */
 
 import * as React from 'react'
-import type { TurboCapability, TurboMode, TurboSessionMetrics } from '../shared/types.js'
+import type { TurboCapability, TurboGear, TurboMode, TurboSessionMetrics } from '../shared/types.js'
 import { TurboController, emptyMetrics } from './turbo-controller.js'
 
 /** Locale namespace owned by this plugin. */
@@ -45,6 +45,7 @@ type Status = 'loading' | 'ready' | 'unavailable'
 
 interface Snapshot {
   readonly mode: TurboMode
+  readonly gear: TurboGear
   readonly revision: number
   readonly capabilities: readonly TurboCapability[]
   readonly metrics: TurboSessionMetrics
@@ -52,6 +53,7 @@ interface Snapshot {
 
 const INITIAL: Snapshot = {
   mode: 'default',
+  gear: 'fast',
   revision: 0,
   capabilities: [],
   metrics: emptyMetrics(),
@@ -104,6 +106,7 @@ export function TurboToggle(props: TurboToggleProps): React.ReactElement {
       if (result.kind === 'ok') {
         setSnapshot({
           mode: result.view.state.mode,
+          gear: result.view.state.gear,
           revision: result.view.state.revision,
           capabilities: result.view.capabilities,
           metrics: result.view.metrics,
@@ -188,12 +191,13 @@ export function TurboToggle(props: TurboToggleProps): React.ReactElement {
     // Optimistic *display* only: the chip shows the target while the request is
     // in flight, and reverts unless the Host confirms it.
     setSnapshot({ ...previous, mode: target })
-    void controller.write(target, previous.revision).then((result) => {
+    void controller.write(target, previous.revision, previous.gear).then((result) => {
       if (!aliveRef.current) return
       setSwitching(false)
       if (result.kind === 'ok') {
         setSnapshot({
           mode: result.view.state.mode,
+          gear: result.view.state.gear,
           revision: result.view.state.revision,
           capabilities: result.view.capabilities,
           metrics: result.view.metrics,
@@ -204,6 +208,7 @@ export function TurboToggle(props: TurboToggleProps): React.ReactElement {
       if (result.kind === 'conflict') {
         setSnapshot({
           mode: result.view.state.mode,
+          gear: result.view.state.gear,
           revision: result.view.state.revision,
           capabilities: previous.capabilities,
           metrics: previous.metrics,
@@ -227,6 +232,51 @@ export function TurboToggle(props: TurboToggleProps): React.ReactElement {
     })
   }, [snapshot, status, switching, tr])
 
+  const onGearChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>): void => {
+    const controller = controllerRef.current
+    if (controller === undefined || switching || status !== 'ready' || snapshot.mode !== 'turbo') return
+    const previous = snapshot
+    const gear: TurboGear = event.currentTarget.value === '1' ? 'max' : 'fast'
+    if (gear === previous.gear) return
+    setSwitching(true)
+    setError(null)
+    setSnapshot({ ...previous, gear })
+    void controller.write('turbo', previous.revision, gear).then((result) => {
+      if (!aliveRef.current) return
+      setSwitching(false)
+      if (result.kind === 'ok') {
+        setSnapshot({
+          mode: result.view.state.mode,
+          gear: result.view.state.gear,
+          revision: result.view.state.revision,
+          capabilities: result.view.capabilities,
+          metrics: result.view.metrics,
+        })
+        return
+      }
+      if (result.kind === 'conflict') {
+        setSnapshot({
+          mode: result.view.state.mode,
+          gear: result.view.state.gear,
+          revision: result.view.state.revision,
+          capabilities: previous.capabilities,
+          metrics: previous.metrics,
+        })
+        setError(tr('error.conflict', 'Another tab changed this session; showing the Host value.'))
+        return
+      }
+      setSnapshot(previous)
+      setError(result.kind === 'offline'
+        ? tr('error.offline', 'Host unreachable — Turbo not changed.')
+        : tr('error.generic', 'Turbo switch failed.'))
+    }, () => {
+      if (!aliveRef.current) return
+      setSwitching(false)
+      setSnapshot(previous)
+      setError(tr('error.generic', 'Turbo switch failed.'))
+    })
+  }, [snapshot, status, switching, tr])
+
   const mode = snapshot.mode
   const on = mode === 'turbo'
   const label = status === 'loading'
@@ -236,7 +286,9 @@ export function TurboToggle(props: TurboToggleProps): React.ReactElement {
       : switching
         ? tr('label.switching', 'Switching…')
         : on
-          ? tr('label.on', '⚡ Turbo ON')
+          ? snapshot.gear === 'max'
+            ? tr('label.max', '🔥 极限')
+            : tr('label.fast', '⚡ 极速')
           : tr('label.off', 'Turbo')
 
   const title = status === 'unavailable'
@@ -265,9 +317,27 @@ export function TurboToggle(props: TurboToggleProps): React.ReactElement {
         onClick={onToggle}
         data-dsh-turbo-mode={status === 'ready' ? mode : 'unknown'}
       >
-        <span className="dshTurbo_bolt" aria-hidden="true">{on && status === 'ready' ? '⚡' : ''}</span>
+        <span className="dshTurbo_bolt" aria-hidden="true">{on && status === 'ready' ? (snapshot.gear === 'max' ? '🔥' : '⚡') : ''}</span>
         <span className="dshTurbo_text">{label}</span>
       </button>
+      <label
+        className={`dshTurbo_gears ${!on || status !== 'ready' ? 'dshTurbo_gearsDisabled' : ''}`}
+        title={tr('gear.title', 'Drag to choose Fast or Max')}
+      >
+        <span className={snapshot.gear === 'fast' ? 'dshTurbo_gearActive' : ''}>{tr('gear.fast', '极速')}</span>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="1"
+          value={snapshot.gear === 'max' ? 1 : 0}
+          aria-label={tr('gear.aria', 'Turbo gear')}
+          disabled={!on || status !== 'ready' || switching}
+          onChange={onGearChange}
+          data-dsh-turbo-gear={snapshot.gear}
+        />
+        <span className={snapshot.gear === 'max' ? 'dshTurbo_gearActive dshTurbo_gearMax' : ''}>{tr('gear.max', '极限')}</span>
+      </label>
       <button
         type="button"
         className="dshTurbo_info"
@@ -314,6 +384,10 @@ function DetailsPanel({ tr, anchor, onClose }: DetailsPanelProps): React.ReactEl
       <p className="dshTurbo_intro">
         {tr('details.intro', 'Helps tasks take a more direct path and finish faster.')}
       </p>
+      <div className="dshTurbo_gearHelp">
+        <p><strong>{tr('gear.fast', '极速')}</strong>: {tr('details.fast', '少思考、少绕路，优先控制 Token。')}</p>
+        <p><strong>{tr('gear.max', '极限')}</strong>: {tr('details.max', '允许多花 Token，并行获取上下文和执行独立工具，优先压缩等待时间。')}</p>
+      </div>
       <div className="dshTurbo_benefits">
         <div className="dshTurbo_benefit">
           <strong className="dshTurbo_metric">{tr('details.flow.value', 'about 20%')}</strong>
@@ -348,6 +422,12 @@ export const TURBO_CSS = `
 .dshTurbo_bolt{display:inline-flex;width:0;overflow:hidden}
 .dshTurbo_on .dshTurbo_bolt,.dshTurbo_button:not(.dshTurbo_on) .dshTurbo_bolt{width:0}
 .dshTurbo_info{width:18px;height:18px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:11px;line-height:1;cursor:pointer}
+.dshTurbo_gears{display:inline-flex;align-items:center;gap:3px;color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:14px;white-space:nowrap}
+.dshTurbo_gears input{width:38px;height:14px;margin:0;accent-color:var(--dsw-alias-state-business-primary);cursor:pointer}
+.dshTurbo_gearsDisabled{opacity:.38}
+.dshTurbo_gearsDisabled input{cursor:default}
+.dshTurbo_gearActive{color:var(--dsw-alias-state-business-primary);font-weight:600}
+.dshTurbo_gearMax{color:var(--dsw-alias-state-warning-primary,var(--dsw-alias-state-business-primary))}
 .dshTurbo_info:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dshTurbo_info:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}
 .dshTurbo_error{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-state-error-primary);font-size:11px;line-height:16px}
@@ -356,6 +436,9 @@ export const TURBO_CSS = `
 .dshTurbo_close{border:0;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:16px;line-height:16px;cursor:pointer;padding:0 2px}
 .dshTurbo_close:hover{color:var(--dsw-alias-label-primary)}
 .dshTurbo_intro{margin:0 0 10px;color:var(--dsw-alias-label-secondary)}
+.dshTurbo_gearHelp{margin:0 0 10px;padding:7px 8px;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}
+.dshTurbo_gearHelp p{margin:0}
+.dshTurbo_gearHelp p+p{margin-top:4px}
 .dshTurbo_benefits{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .dshTurbo_benefit{display:flex;min-width:0;flex-direction:column;gap:1px;padding:9px;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-state-business-tertiary);color:var(--dsw-alias-label-secondary)}
 .dshTurbo_metric{color:var(--dsw-alias-state-business-primary);font-size:18px;line-height:22px;font-variant-numeric:tabular-nums}
@@ -366,5 +449,7 @@ export const TURBO_CSS = `
   .dshTurbo_on .dshTurbo_text{display:none}
   .dshTurbo_on .dshTurbo_bolt{width:auto}
   .dshTurbo_error{display:none}
+  .dshTurbo_gears span{display:none}
+  .dshTurbo_gears input{width:32px}
 }
 `
