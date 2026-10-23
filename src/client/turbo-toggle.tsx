@@ -282,14 +282,14 @@ export function TurboToggle(props: TurboToggleProps): React.ReactElement {
   const label = status === 'loading'
     ? tr('label.loading', 'Turbo')
     : status === 'unavailable'
-      ? tr('label.unavailable', 'Turbo unavailable')
+      ? tr('label.unavailable', 'OVERDRIVE unavailable')
       : switching
         ? tr('label.switching', 'Switching…')
         : on
           ? snapshot.gear === 'max'
             ? tr('label.max', '🔥 极限')
             : tr('label.fast', '⚡ 极速')
-          : tr('label.off', 'Turbo')
+          : tr('label.off', 'OVERDRIVE')
 
   const title = status === 'unavailable'
     ? tr('title.unavailable', 'Turbo host bridge unreachable')
@@ -341,9 +341,9 @@ export function TurboToggle(props: TurboToggleProps): React.ReactElement {
       <button
         type="button"
         className="dshTurbo_info"
-        aria-label={tr('details.open', 'Turbo details')}
+        aria-label={tr('details.open', 'OVERDRIVE details')}
         aria-expanded={detailsOpen}
-        title={tr('details.open', 'Turbo details')}
+        title={tr('details.open', 'OVERDRIVE details')}
         disabled={status === 'unavailable'}
         onClick={() => setDetailsOpen((open) => !open)}
       >
@@ -374,11 +374,11 @@ function DetailsPanel({ tr, anchor, onClose }: DetailsPanelProps): React.ReactEl
     <div
       className="dshTurbo_panel"
       role="dialog"
-      aria-label={tr('details.title', 'What Turbo does')}
+      aria-label={tr('details.title', 'DSH OVERDRIVE')}
       style={{ bottom: `${anchor.bottom}px`, right: `${anchor.right}px` }}
     >
       <div className="dshTurbo_panelHead">
-        <strong>{tr('details.title', 'What Turbo does')}</strong>
+        <strong>{tr('details.title', 'DSH OVERDRIVE')}</strong>
         <button type="button" className="dshTurbo_close" onClick={onClose} aria-label={tr('details.close', 'Close')}>×</button>
       </div>
       <p className="dshTurbo_intro">

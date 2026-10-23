@@ -1,10 +1,12 @@
-# DSH Turbo
+# DSH OVERDRIVE
+
+> **少走弯路，火力全开。**  技术包名保持为 `dsh-turbo`，以兼容现有安装和社区链接。
 
 [中文](#中文说明) | [English](#english-documentation)
 
 ## 中文说明
 
-DSH Turbo 是一个面向 **DeepSeek Harness** 的原生插件。它在输入区提供按会话生效的
+DSH OVERDRIVE 是一个面向 **DeepSeek Harness** 的原生双档执行引擎。它在输入区提供按会话生效的
 Turbo 开关与两档滑块，并在 Host 运行阶段应用可撤销的执行策略，用来减少不必要的步骤和等待时间。
 
 - 已在 Windows 桌面版 **DSH `0.2.0-rc.2`**（build `04f392c9`）实测。
@@ -100,6 +102,8 @@ powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profile desktop
 ---
 
 ## English documentation
+
+**DSH OVERDRIVE — Dual-Gear Execution Engine for DeepSeek Harness.**
 
 Session-scoped low-latency execution mode for **DeepSeek Harness**, as a native
 plugin: a Web UI toggle with Fast/Max gears in the composer, Host-authoritative per-session state,

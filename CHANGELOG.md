@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 — 2026-10-23
+
+- Adopts **DSH OVERDRIVE** as the public product name and the tagline “少走弯路，火力全开”。
+- Keeps the package id, plugin id, API routes and repository URL as `dsh-turbo` for compatibility.
+- Updates the composer and result panel branding without changing Fast/Max behavior.
+
 ## 0.2.0 — 2026-10-23
 
 - Adds a draggable two-position Fast/Max gear control while preserving the Turbo OFF fallback.
