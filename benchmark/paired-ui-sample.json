@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-23",
+  "design": "single same-prompt paired UI pilot",
+  "task": "Create a standalone animated HTML page of a pelican riding a bicycle by the sea",
+  "turbo": {
+    "elapsedSeconds": 415,
+    "displayedTokensMillions": 3.7,
+    "modelSteps": 42,
+    "toolCalls": 41,
+    "outputLines": 654,
+    "outputBytes": 28160
+  },
+  "default": {
+    "elapsedSeconds": 586,
+    "displayedTokensMillions": 7.5,
+    "modelSteps": 72,
+    "toolCalls": 71,
+    "outputLines": 481,
+    "outputBytes": 24576
+  },
+  "relative": {
+    "elapsedReductionPercent": 29.2,
+    "throughputMultiplier": 1.41,
+    "displayedTokensReductionPercent": 50.7,
+    "modelStepsReductionPercent": 41.7,
+    "toolCallsReductionPercent": 42.3
+  },
+  "limitations": [
+    "One paired sample only; not randomized or repeated.",
+    "Outputs were both accepted but were not identical in scope or features.",
+    "Displayed token usage includes cached reads and is not equivalent to newly generated or billed tokens.",
+    "Results may vary with task, model, cache state, network and provider conditions."
+  ]
+}

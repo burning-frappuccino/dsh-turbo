@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-labelledby="title desc">
+  <title id="title">DSH Turbo icon</title>
+  <desc id="desc">A blue rounded square with a yellow lightning bolt and motion lines.</desc>
+  <defs>
+    <linearGradient id="bg" x1="18" y1="10" x2="162" y2="170" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2877FF"/>
+      <stop offset="1" stop-color="#123DAA"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#06143C" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="164" height="164" rx="42" fill="url(#bg)"/>
+  <path d="M30 67h38M24 90h34M31 113h28" fill="none" stroke="#BBD4FF" stroke-width="8" stroke-linecap="round" opacity=".9"/>
+  <path d="M104 31 61 98h34l-14 51 48-72H95l9-46Z" fill="#FFD34E" stroke="#FFF2A8" stroke-width="4" stroke-linejoin="round" filter="url(#shadow)"/>
+</svg>

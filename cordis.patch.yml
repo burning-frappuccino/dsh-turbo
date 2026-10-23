@@ -1,0 +1,36 @@
+# dsh-turbo — bundle layer for a DeepSeek Harness profile.
+#
+# Installing this package with
+#   dsh plugin --profile desktop add link:C:\path\to\dsh-turbo
+# (or the Web/agent plugin manager) selects the bundle and inserts the Host
+# row below. The row is deliberately minimal: every user-tunable fact is a
+# documented `config` key with a conservative default.
+#
+# Host row id `dsh-turbo` is also the client entry id: the package manifest
+# declares `dsh.client` so /plugins serves lib/client.js from the same entry.
+- insert:
+    - id: dsh-turbo
+      name: dsh-turbo
+      config:
+        # Order of the agent-scoped prompt section. 700 is an unowned gap
+        # between plan policy (500) / team policy (600) and tool guidance
+        # (1000+); see SECTION_ORDERS in @deepseek-ai/dsh-system-prompt.
+        sectionOrder: 700
+        # Turbo ON lowers the request's reasoning effort through the verified
+        # agent/request waterfall. Turbo OFF still returns the original request
+        # unchanged. Set 'inherit' to disable this latency/quality trade-off.
+        # The shipped DeepSeek Messages adapter accepts only off|low|high|max;
+        # an id it refuses disables the lever for that Agent (the turn retries
+        # without it) instead of failing.
+        reasoningEffort: low
+        # Append one JSON line per applied policy step to
+        # $DSH_HOME/storages/dsh-turbo/evidence.jsonl so "strategy really ran"
+        # is provable from logs, not from reply length.
+        evidenceLog: true
+        # Session state + turn metrics persistence directory (relative to
+        # $DSH_HOME/storages). Omit to keep state in memory only.
+        storageDir: dsh-turbo
+        # Mode a Session that was never toggled reads as. Keep 'default' so a
+        # new conversation starts untouched; set 'turbo' to make Turbo the
+        # deployment default for every new Session.
+        defaultMode: default

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">DSH Turbo paired UI task result</title>
+  <desc id="desc">A single paired test found 29 percent less time, 51 percent less displayed token usage, 42 percent fewer model steps and 42 percent fewer tool calls with Turbo.</desc>
+  <defs>
+    <linearGradient id="bg" x1="80" y1="0" x2="1120" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111B38"/>
+      <stop offset="1" stop-color="#080D1D"/>
+    </linearGradient>
+    <linearGradient id="turbo" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#54A4FF"/>
+      <stop offset="1" stop-color="#6E68FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="28" fill="url(#bg)"/>
+  <circle cx="1100" cy="70" r="180" fill="#246BFD" opacity=".09"/>
+  <text x="64" y="72" fill="#FFFFFF" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700">⚡ DSH Turbo — Paired UI Task Test</text>
+  <text x="64" y="108" fill="#91A1C6" font-family="Segoe UI, Arial, sans-serif" font-size="18">Same prompt · one paired pilot · 2026-10-23</text>
+
+  <g transform="translate(64 145)">
+    <rect width="520" height="182" rx="20" fill="#151F3C" stroke="#29385F"/>
+    <text x="28" y="38" fill="#A8B5D2" font-family="Segoe UI, Arial, sans-serif" font-size="18">COMPLETION TIME</text>
+    <text x="28" y="82" fill="#FFFFFF" font-family="Segoe UI, Arial, sans-serif" font-size="32" font-weight="700">9:46 → 6:55</text>
+    <text x="383" y="80" fill="#63D8A2" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">−29%</text>
+    <rect x="28" y="108" width="420" height="16" rx="8" fill="#33415F"/>
+    <rect x="28" y="108" width="297" height="16" rx="8" fill="url(#turbo)"/>
+    <text x="28" y="154" fill="#7FB8FF" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="600">1.41× completion throughput</text>
+  </g>
+
+  <g transform="translate(616 145)">
+    <rect width="520" height="182" rx="20" fill="#151F3C" stroke="#29385F"/>
+    <text x="28" y="38" fill="#A8B5D2" font-family="Segoe UI, Arial, sans-serif" font-size="18">DISPLAYED TOKEN USAGE</text>
+    <text x="28" y="82" fill="#FFFFFF" font-family="Segoe UI, Arial, sans-serif" font-size="32" font-weight="700">7.5M → 3.7M</text>
+    <text x="383" y="80" fill="#63D8A2" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">−51%</text>
+    <rect x="28" y="108" width="420" height="16" rx="8" fill="#33415F"/>
+    <rect x="28" y="108" width="207" height="16" rx="8" fill="url(#turbo)"/>
+    <text x="28" y="154" fill="#91A1C6" font-family="Segoe UI, Arial, sans-serif" font-size="16">Includes cached reads; not billed-token data</text>
+  </g>
+
+  <g transform="translate(64 353)">
+    <rect width="520" height="154" rx="20" fill="#151F3C" stroke="#29385F"/>
+    <text x="28" y="38" fill="#A8B5D2" font-family="Segoe UI, Arial, sans-serif" font-size="18">MODEL STEPS</text>
+    <text x="28" y="88" fill="#FFFFFF" font-family="Segoe UI, Arial, sans-serif" font-size="38" font-weight="700">72 → 42</text>
+    <text x="386" y="86" fill="#63D8A2" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">−42%</text>
+    <text x="28" y="124" fill="#91A1C6" font-family="Segoe UI, Arial, sans-serif" font-size="16">30 fewer steps in this task</text>
+  </g>
+
+  <g transform="translate(616 353)">
+    <rect width="520" height="154" rx="20" fill="#151F3C" stroke="#29385F"/>
+    <text x="28" y="38" fill="#A8B5D2" font-family="Segoe UI, Arial, sans-serif" font-size="18">TOOL CALLS</text>
+    <text x="28" y="88" fill="#FFFFFF" font-family="Segoe UI, Arial, sans-serif" font-size="38" font-weight="700">71 → 41</text>
+    <text x="386" y="86" fill="#63D8A2" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">−42%</text>
+    <text x="28" y="124" fill="#91A1C6" font-family="Segoe UI, Arial, sans-serif" font-size="16">30 fewer calls in this task</text>
+  </g>
+
+  <line x1="64" y1="546" x2="1136" y2="546" stroke="#29385F"/>
+  <text x="64" y="578" fill="#A8B5D2" font-family="Segoe UI, Arial, sans-serif" font-size="17">Pilot evidence only — one paired sample. Results vary by task, model, cache and network.</text>
+  <text x="1136" y="607" fill="#7FB8FF" text-anchor="end" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="600">github.com/burning-frappuccino/dsh-turbo</text>
+</svg>

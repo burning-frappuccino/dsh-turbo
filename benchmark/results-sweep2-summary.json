@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sweep": "prompt-v2",
+  "source": "benchmark/run-log-2.txt (parsed; the harness process was interrupted before writing its own JSON)",
+  "tasks": 20,
+  "turbo": { "runs": 20, "passed": 19, "medianWallMs": 33638, "meanWallMs": 38287, "p90WallMs": 56699, "meanSteps": 14, "meanToolCalls": 13, "minMs": 20744, "maxMs": 74909 },
+  "default": { "runs": 19, "passed": 18, "medianWallMs": 29980, "meanWallMs": 40560, "p90WallMs": 83772, "meanSteps": 12, "meanToolCalls": 13, "minMs": 9422, "maxMs": 181958 },
+  "note": "read-and-report default sample is missing because the sampling process was interrupted"
+}

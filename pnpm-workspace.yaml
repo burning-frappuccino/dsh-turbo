@@ -1,0 +1,8 @@
+packages:
+  - .
+
+# esbuild's install script only links its platform binary; the plugin's runtime
+# output imports nothing from esbuild, so approving the build keeps
+# `pnpm install` clean on a fresh clone.
+allowBuilds:
+  esbuild: true

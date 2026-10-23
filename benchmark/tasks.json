@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "notes": "Deterministic programming tasks with machine-checkable acceptance. Each run starts from the same seed files in a fresh workspace, so a Turbo ON/OFF pair is comparable. `check` is a Node expression evaluated with `require` relative to the workspace; it must throw to fail.",
+  "tasks": [
+    {
+      "id": "sum-js",
+      "prompt": "In this directory create sum.js exporting a function sum(a, b) that returns the numeric sum. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./sum.js'); assert(m.sum(2, 3) === 5 && m.sum(-1, 1) === 0)"
+    },
+    {
+      "id": "fizzbuzz-js",
+      "prompt": "In this directory create fizzbuzz.js exporting fizzbuzz(n) returning an array of strings for 1..n where multiples of 3 are 'Fizz', of 5 'Buzz', of both 'FizzBuzz', others the number as a string. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./fizzbuzz.js'); const a = m.fizzbuzz(15); assert(a.length === 15 && a[2] === 'Fizz' && a[4] === 'Buzz' && a[14] === 'FizzBuzz' && a[0] === '1')"
+    },
+    {
+      "id": "fix-offbyone",
+      "prompt": "Fix the bug in buggy.js so that range(n) returns [0, 1, ..., n-1]. Change only buggy.js.",
+      "seed": {
+        "buggy.js": "function range(n) {\n  const out = []\n  for (let i = 0; i < n + 1; i += 1) out.push(i)\n  return out\n}\nmodule.exports = { range }\n"
+      },
+      "check": "const m = require('./buggy.js'); assert.deepStrictEqual(m.range(3), [0, 1, 2]); assert.deepStrictEqual(m.range(0), [])"
+    },
+    {
+      "id": "parse-json",
+      "prompt": "In this directory create parse.js exporting parseJson(text) that returns { ok: true, value } for valid JSON and { ok: false } for invalid input (never throws). Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./parse.js'); assert.deepStrictEqual(m.parseJson('{\"a\":1}'), { ok: true, value: { a: 1 } }); assert.deepStrictEqual(m.parseJson('{'), { ok: false })"
+    },
+    {
+      "id": "slug-js",
+      "prompt": "In this directory create slug.js exporting slugify(text) that lowercases, trims, replaces runs of non-alphanumeric characters with a single '-', and strips leading/trailing '-'. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./slug.js'); assert(m.slugify('  Hello,  World! ') === 'hello-world'); assert(m.slugify('A--B') === 'a-b')"
+    },
+    {
+      "id": "count-lines",
+      "prompt": "Create count.js exporting countLines(text) that returns the number of non-empty lines in text. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./count.js'); assert(m.countLines('a\\n\\nb\\n') === 2); assert(m.countLines('') === 0)"
+    },
+    {
+      "id": "dedupe-js",
+      "prompt": "Create unique.js exporting unique(items) that returns the items with duplicates removed, keeping first-seen order. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./unique.js'); assert.deepStrictEqual(m.unique([3,1,3,2,1]), [3,1,2])"
+    },
+    {
+      "id": "clamp-js",
+      "prompt": "Create clamp.js exporting clamp(value, min, max) that constrains value to the inclusive range. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./clamp.js'); assert(m.clamp(5, 1, 10) === 5); assert(m.clamp(-3, 0, 10) === 0); assert(m.clamp(99, 0, 10) === 10)"
+    },
+    {
+      "id": "fix-async",
+      "prompt": "Fix asyncbug.js so that getValue() resolves to 42. Change only asyncbug.js.",
+      "seed": {
+        "asyncbug.js": "function getValue() {\n  return 42\n}\nmodule.exports = { getValue }\n"
+      },
+      "check": "const m = require('./asyncbug.js'); Promise.resolve(m.getValue()).then((v) => { assert(v === 42) })"
+    },
+    {
+      "id": "word-count",
+      "prompt": "Create words.js exporting wordCount(text) returning a plain object mapping lowercase words to counts, splitting on whitespace. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./words.js'); assert.deepStrictEqual(m.wordCount('A a b'), { a: 2, b: 1 })"
+    },
+    {
+      "id": "truncate-js",
+      "prompt": "Create trunc.js exporting truncate(text, max) that shortens text to at most max characters and appends '…' when it was shortened (result length may exceed max by one). Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./trunc.js'); assert(m.truncate('abcdef', 3) === 'abc…'); assert(m.truncate('ab', 3) === 'ab')"
+    },
+    {
+      "id": "group-by",
+      "prompt": "Create group.js exporting groupBy(items, keyFn) returning an object of arrays. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./group.js'); const r = m.groupBy([1,2,3,4], (n) => (n % 2 ? 'odd' : 'even')); assert.deepStrictEqual(r, { odd: [1,3], even: [2,4] })"
+    },
+    {
+      "id": "retry-js",
+      "prompt": "Create retry.js exporting async retry(fn, attempts) that calls fn until it resolves, retrying up to attempts times total, and rejects with the last error. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./retry.js'); let n = 0; const fn = async () => { n += 1; if (n < 3) throw new Error('x'); return 'ok' }; m.retry(fn, 5).then((v) => assert(v === 'ok' && n === 3))"
+    },
+    {
+      "id": "csv-line",
+      "prompt": "Create csv.js exporting toCsvRow(values) that joins values with commas and wraps only values containing a comma in double quotes. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./csv.js'); assert(m.toCsvRow(['a','b,c']) === 'a,\"b,c\"')"
+    },
+    {
+      "id": "fix-import",
+      "prompt": "Fix main.js so that requiring it returns 7. The helper is in helper.js and must not change.",
+      "seed": {
+        "helper.js": "module.exports = { value: 7 }\n",
+        "main.js": "const { val } = require('./helper.js')\nmodule.exports = val\n"
+      },
+      "check": "const assert2 = require('node:assert'); assert2.strictEqual(require('./main.js'), 7)"
+    },
+    {
+      "id": "binary-search",
+      "prompt": "Create search.js exporting binarySearch(sorted, target) that returns the index or -1. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./search.js'); assert(m.binarySearch([1,3,5,7], 5) === 2); assert(m.binarySearch([1,3], 4) === -1)"
+    },
+    {
+      "id": "deep-equal-lite",
+      "prompt": "Create equal.js exporting equal(a, b) that deep-compares plain JSON values. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./equal.js'); assert(m.equal({a:[1,{b:2}]}, {a:[1,{b:2}]}) === true); assert(m.equal({a:1}, {a:2}) === false)"
+    },
+    {
+      "id": "format-bytes",
+      "prompt": "Create bytes.js exporting formatBytes(n) returning 'N B', 'N.N KB', 'N.N MB' with one decimal place for units above bytes. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./bytes.js'); assert(m.formatBytes(512) === '512 B'); assert(m.formatBytes(1536) === '1.5 KB')"
+    },
+    {
+      "id": "todo-list",
+      "prompt": "Create todo.js exporting a factory createTodo() with add(text), remove(index), list() returning current items as an array. Do not create any other file.",
+      "seed": {},
+      "check": "const m = require('./todo.js'); const t = m.createTodo(); t.add('a'); t.add('b'); t.remove(0); assert.deepStrictEqual(t.list(), ['b'])"
+    },
+    {
+      "id": "read-and-report",
+      "prompt": "Read data.json in this directory and create report.js exporting summarise() that returns the number of items in the array at key 'items'. Do not modify data.json.",
+      "seed": {
+        "data.json": "{\"items\":[1,2,3,4,5]}\n"
+      },
+      "check": "const m = require('./report.js'); assert(m.summarise() === 5)"
+    }
+  ]
+}

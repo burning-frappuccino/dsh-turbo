@@ -1,0 +1,15 @@
+# build and toolchain
+node_modules/
+*.tsbuildinfo
+
+# benchmark output: reproducible, but large and machine-specific
+benchmark/runs/
+benchmark/run-log*.txt
+benchmark/results-*.json
+!benchmark/results-sweep2-summary.json
+
+# local scratch
+.DS_Store
+Thumbs.db
+.edge-render/
+release/
