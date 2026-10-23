@@ -1,5 +1,103 @@
 # DSH Turbo
 
+[中文](#中文说明) | [English](#english-documentation)
+
+## 中文说明
+
+DSH Turbo 是一个面向 **DeepSeek Harness** 的原生插件。它在输入区提供按会话生效的
+Turbo 开关，并在 Host 运行阶段应用可撤销的执行策略，用来减少不必要的步骤和等待时间。
+
+- 已在 Windows 桌面版 **DSH `0.2.0-rc.2`**（build `04f392c9`）实测。
+- 每个会话独立保存开关状态；新会话默认关闭 Turbo。
+- 关闭后不注入 Turbo 提示词，也不会改变上游请求。
+- 不替换 Agent 循环，不修改权限、审批、沙箱或模型内部实现。
+- Host 仍保留耗时、步骤、工具调用和验证记录；普通用户的 `?` 弹窗只展示易懂的效果说明。
+
+### 主要功能
+
+| 功能 | 作用 |
+|---|---|
+| 原生 Web UI 开关 | 在输入框旁显示 `Turbo` / `⚡ Turbo ON`，只影响当前会话。 |
+| Host 权威状态 | 状态保存在 Host，多个标签页发生冲突时以 Host 记录为准。 |
+| 运行期策略 | 通过 DSH 支持的提示词与请求生命周期接口影响下一次执行。 |
+| 推理强度控制 | 可在 Turbo 开启时使用更低的 `reasoningEffort`；模型路由拒绝时会安全撤销并重试。 |
+| 可观测数据 | 记录轮次耗时、模型步骤、工具调用及是否运行过验证命令。 |
+| 完整回退 | 关闭或卸载插件后恢复默认执行路径，不修改 DSH 上游源代码。 |
+
+### 用户同题实测
+
+![DSH Turbo 用户同题对照](./assets/benchmark-user-pair.png)
+
+一次相同提示词的单文件 HTML 任务对照结果：
+
+| 指标 | Turbo ON | 默认模式 | 相对变化 |
+|---|---:|---:|---:|
+| 完成耗时 | 6 分 55 秒 | 9 分 46 秒 | **减少 29%**，完成速度约 1.41× |
+| 界面显示 Token | 3.7M | 7.5M | **减少 51%** |
+| 模型步骤 | 42 | 72 | **减少 42%** |
+| 工具调用 | 41 | 71 | **减少 42%** |
+
+这是一次用户场景的配对试验，不是对所有任务的性能保证。界面显示的 Token 包含缓存读取，不能直接
+等同于新增 Token 或账单用量；任务、模型、缓存、网络和服务状态都会影响结果。完整方法和更大范围的
+基准测试请查看 [`PERFORMANCE.md`](./PERFORMANCE.md)，机器可读数据位于
+[`benchmark/paired-ui-sample.json`](./benchmark/paired-ui-sample.json)。
+
+### 安装
+
+```powershell
+git clone https://github.com/burning-frappuccino/dsh-turbo.git
+cd dsh-turbo
+pnpm install --frozen-lockfile
+pnpm run build
+pnpm test
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop
+```
+
+安装后刷新 DeepSeek Harness 页面；如果此前运行过旧版本，请完整重启 DeepSeek Harness，让 Node/Cordis
+重新载入模块。
+
+也可以从 [GitHub Release](https://github.com/burning-frappuccino/dsh-turbo/releases/latest)
+下载预构建的 `dsh-turbo.tgz`。
+
+### 使用方法
+
+1. 打开任意会话，在输入框旁点击 **Turbo**。
+2. 显示 `⚡ Turbo ON` 表示 Host 已确认本会话开启。
+3. 点击旁边的 `?` 可以看到效果说明和同题测试建议。
+4. 再次点击即可恢复默认模式；正在执行的请求不会被中途改写，新模式从下一次组装请求开始生效。
+
+健康检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:19387/api/dsh-turbo/health | ConvertTo-Json -Depth 5
+```
+
+卸载：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profile desktop
+```
+
+### 测试与资料
+
+- 自动测试：**40 项全部通过**。
+- [`PERFORMANCE.md`](./PERFORMANCE.md)：性能测试、用户同题对照与局限说明。
+- [`compatibility-report.md`](./compatibility-report.md)：DSH API、Hook 和兼容性核查。
+- [`STATUS.md`](./STATUS.md)：开发状态与文件清单。
+- [`CHANGELOG.md`](./CHANGELOG.md)：版本更新记录。
+
+### 请作者喝杯咖啡
+
+如果 DSH Turbo 帮你节省了时间，可以通过 **TRON（TRC20）**支持作者：
+
+`TX7iacb1LVD3sYMTeqrWwjYnSje2Yyi4qv`
+
+请确认使用 TRON（TRC20）网络并核对地址；链上转账无法撤销。
+
+---
+
+## English documentation
+
 Session-scoped low-latency execution mode for **DeepSeek Harness**, as a native
 plugin: a Web UI toggle in the composer, Host-authoritative per-session state,
 and a real runtime policy applied at the harness' own lifecycle boundary.
