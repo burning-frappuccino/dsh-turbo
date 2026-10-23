@@ -58,10 +58,11 @@ const DEFAULTS: TurboConfig = {
   // adapter accepts only `off | low | high | max`, so defaulting to `minimal`
   // would fail every Turbo turn with UNSUPPORTED_REASONING_EFFORT.
   reasoningEffort: 'inherit',
-  maxReasoningEffort: 'low',
+  maxReasoningEffort: 'high',
   evidenceLog: true,
   storageDir: 'dsh-turbo',
   defaultMode: 'default',
+  defaultGear: 'fast',
 }
 
 /**
@@ -74,16 +75,14 @@ const DEFAULTS: TurboConfig = {
 const EFFORTS = new Set(['inherit', 'off', 'minimal', 'low', 'medium', 'high', 'max'])
 const MODES = new Set(['default', 'turbo'])
 
-/** Validate the row's config; unknown keys are rejected so typos fail loudly. */
-export function resolveConfig(raw: unknown): TurboConfig {
+/** Validate known config values; tolerate future keys during rolling updates. */
+export function resolveConfig(raw: unknown, onUnknown?: (keys: readonly string[]) => void): TurboConfig {
   if (raw === undefined || raw === null) return DEFAULTS
   if (typeof raw !== 'object') throw new Error('dsh-turbo: config must be an object')
   const input = raw as Record<string, unknown>
-  const known = new Set(['sectionOrder', 'reasoningEffort', 'maxReasoningEffort', 'evidenceLog', 'storageDir', 'defaultMode'])
+  const known = new Set(['sectionOrder', 'reasoningEffort', 'maxReasoningEffort', 'evidenceLog', 'storageDir', 'defaultMode', 'defaultGear'])
   const unknown = Object.keys(input).filter((key) => !known.has(key))
-  if (unknown.length > 0) {
-    throw new Error(`dsh-turbo: unknown config key(s) ${unknown.join(', ')} — accepted keys are ${[...known].join(', ')}`)
-  }
+  if (unknown.length > 0) onUnknown?.(unknown)
   const sectionOrder = input.sectionOrder ?? DEFAULTS.sectionOrder
   if (typeof sectionOrder !== 'number' || !Number.isFinite(sectionOrder)) {
     throw new Error('dsh-turbo: config sectionOrder must be a finite number')
@@ -106,6 +105,11 @@ export function resolveConfig(raw: unknown): TurboConfig {
   if (typeof defaultMode !== 'string' || !MODES.has(defaultMode)) {
     throw new Error('dsh-turbo: config defaultMode must be "default" or "turbo"')
   }
+  const defaultGear = input.defaultGear ?? DEFAULTS.defaultGear
+  const parsedDefaultGear = parseGear(defaultGear)
+  if (parsedDefaultGear === undefined) {
+    throw new Error('dsh-turbo: config defaultGear must be "fast" or "max"')
+  }
   return {
     sectionOrder,
     reasoningEffort: reasoningEffort as TurboConfig['reasoningEffort'],
@@ -113,6 +117,7 @@ export function resolveConfig(raw: unknown): TurboConfig {
     evidenceLog,
     storageDir,
     defaultMode: defaultMode as TurboConfig['defaultMode'],
+    defaultGear: parsedDefaultGear,
   }
 }
 
@@ -125,8 +130,10 @@ export function dshHome(): string {
 
 /** The Host half's Cordis entry point. */
 export function apply(ctx: TurboContext, rawConfig?: unknown): void {
-  const config = resolveConfig(rawConfig)
   const log = ctx.logger
+  const config = resolveConfig(rawConfig, (keys) => {
+    log?.warn('dsh-turbo: ignoring unknown config key(s): %s', keys.join(', '))
+  })
   const dir = join(dshHome(), 'storages', config.storageDir)
 
   // Flipped by the optional `webServer` registration below; read by the adapter
@@ -136,6 +143,7 @@ export function apply(ctx: TurboContext, rawConfig?: unknown): void {
   const store = new TurboSessionStore({
     path: join(dir, 'state.json'),
     defaultMode: config.defaultMode,
+    defaultGear: config.defaultGear,
     onError: (error) => log?.warn('dsh-turbo: state write failed: %o', error),
   })
   const metrics = new TurboMetrics({

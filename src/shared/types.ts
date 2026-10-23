@@ -121,4 +121,6 @@ export interface TurboConfig {
    * OFF for new Sessions); `turbo` makes Turbo the deployment default.
    */
   readonly defaultMode: TurboMode
+  /** Gear a never-toggled Turbo Session starts with. Default `fast`. */
+  readonly defaultGear: TurboGear
 }

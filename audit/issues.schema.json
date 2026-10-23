@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/dsh-turbo/audit/issues.schema.json",
+  "title": "DSH Turbo plugin audit",
+  "description": "Machine-readable audit of the dsh-turbo plugin: gates actually run, issues found, evidence, and recommendations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "generatedAt", "subject", "environment", "gates", "issues", "counts"],
+  "properties": {
+    "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "kind": { "const": "plugin-audit" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "generator": { "type": "string" },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "gitHead": { "type": "string" },
+        "gitHeadTime": { "type": "string" },
+        "workingTreeDirty": { "type": "boolean" },
+        "repository": { "type": "string" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["dshVersion", "node", "os"],
+      "properties": {
+        "dshVersion": { "type": "string" },
+        "dshSurface": { "type": "string" },
+        "profile": { "type": "string" },
+        "profilePath": { "type": "string" },
+        "gui": { "type": "string" },
+        "node": { "type": "string" },
+        "os": { "type": "string" },
+        "powershell": { "type": "string" }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "command", "result"],
+        "properties": {
+          "id": { "type": "string" },
+          "command": { "type": "string" },
+          "result": { "enum": ["pass", "fail", "skipped"] },
+          "detail": { "type": "string" },
+          "checkedAt": { "type": "string" }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/issue" }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "open", "fixed", "documented", "accepted", "bySeverity"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "open": { "type": "integer", "minimum": 0 },
+        "fixed": { "type": "integer", "minimum": 0 },
+        "documented": { "type": "integer", "minimum": 0 },
+        "accepted": { "type": "integer", "minimum": 0 },
+        "bySeverity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["critical", "high", "medium", "low"],
+          "properties": {
+            "critical": { "type": "integer", "minimum": 0 },
+            "high": { "type": "integer", "minimum": 0 },
+            "medium": { "type": "integer", "minimum": 0 },
+            "low": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "suggestedOrder": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "severity", "category", "status", "title", "summary",
+        "evidence", "impact", "recommendation", "relatedFiles"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^TURBO-[0-9]{3}$" },
+        "severity": { "enum": ["critical", "high", "medium", "low"] },
+        "category": {
+          "enum": [
+            "runtime-activation", "product-claim", "configuration", "measurement",
+            "honesty", "efficiency", "ui", "compatibility", "tooling"
+          ]
+        },
+        "status": { "enum": ["open", "fixed", "documented", "accepted", "wontfix"] },
+        "title": { "type": "string", "minLength": 8 },
+        "summary": { "type": "string", "minLength": 20 },
+        "evidence": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "impact": { "type": "string", "minLength": 10 },
+        "recommendation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "effort", "risk"],
+          "properties": {
+            "action": { "type": "string", "minLength": 10 },
+            "effort": { "enum": ["S", "M", "L"] },
+            "risk": { "enum": ["none", "low", "medium", "high"] }
+          }
+        },
+        "relatedFiles": { "type": "array", "items": { "type": "string" } },
+        "workaround": { "type": "string" }
+      }
+    }
+  }
+}

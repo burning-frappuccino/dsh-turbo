@@ -172,6 +172,44 @@ node scripts/benchmark.mjs --profile turbo-bench --repeat 3 --out PERFORMANCE-be
 数据文件：[`benchmark/paired-ui-sample.json`](./benchmark/paired-ui-sample.json)。界面显示的 M tok 包含缓存读取，
 不能直接当作新增 Token 或账单用量；只有一个配对样本，也没有随机化或多次重复。对外可准确表述为：
 **“一次同题实测中，耗时减少 29%、界面 Token 用量减少 51%；效果会因任务、模型和网络而变化。”**
+
+## 4.3 0.2.2 三档校准：Default / Fast low / Max high
+
+2026-10-23 把 Max 从与 Fast 相同的 `low` 改为真正独立的 `high`，并修正基准统计：只有机器
+断言通过的运行进入耗时/token 汇总；任务级差值只使用同一轮三档都通过的完整配对；超时即排除。
+证据日志确认 Max 每步实际记录 `reasoningEffort: "high"`，但 provider 仍把三档的
+`reasoningTokens` 全部报告为 0，因此继续以墙钟、通过率和普通 token 为准。
+
+### 短任务：`sum-js`，3 轮 Latin-square 交错
+
+公开的机器可读记录：`benchmark/validation-2026-10-23.json`；渲染表：
+`benchmark/formal-sum-js-3x.md`。三档共 9 次运行，全部通过。本机原始事件汇总仍保存在
+gitignored 的 `benchmark/results-2026-10-23T14-02-36-460Z.json`。
+
+| arm | 通过 | 中位耗时 | 相对 Default | 均值耗时 | 平均输入 tok | 平均输出 tok |
+|---|---:|---:|---:|---:|---:|---:|
+| Default | 3/3 | 31 413 ms | 基线 | 33 270 ms | 2 940 | 3 417 |
+| Fast (`low`) | 3/3 | 41 606 ms | **+32.4%（更慢）** | 37 664 ms | 3 421 | 3 422 |
+| Max (`high`) | 3/3 | 28 625 ms | **−8.9%** | 38 874 ms | 3 391 | 4 062 |
+
+逐轮 Fast 相对 Default 为 `+11.0% / −23.2% / +52.8%`；Max 为
+`+79.0% / −8.9% / −32.4%`。符号在 3 轮内反复变化。Max 的中位数较快，但均值反而慢
+16.8%，平均输出 token 多 18.9%，不能解释为稳定加速。
+
+### 多文件任务：2 个任务 × 2 轮
+
+12 次运行中有 1 次达到 180 s 超时（即使落盘文件恰好通过也排除）。剩余结果的通过率：
+Default `2/3`、Fast `3/4`、Max `2/4`。只有 `regional-totals` 第 1 轮形成完整有效配对：
+Default 65 922 ms、Fast 72 625 ms（`+10.2%`）、Max 80 712 ms（`+22.4%`）。
+`dashboard-summary` 的 Max 两轮都未通过机器断言。
+
+另一次独立的 `regional-totals` 冒烟却得到 Fast `−44.4%`、Max `+4.1%`，三档都通过。
+同题不同轮次仍然反向，进一步证明采样噪声和模型路径选择大于当前策略的稳定收益。
+
+**当前可发布结论**：Fast 是“低推理、少步骤倾向”，Max 是“高推理、愿意多花预算”的执行偏好；
+两者都不是固定倍数加速器。用户界面中的 `约 1.5× / 节省约 20%` 只能写成邀请用户自己做
+同题 A/B 的示例目标，不能作为本项目已经复现的性能承诺。
+
 ## 5. 局限
 
 1. 样本：20 个任务 × 单次重复（v2）、9 个任务（v1）。这是**试点级**证据，不是产品基准。

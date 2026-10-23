@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "dsh-overdrive-benchmark-evidence",
+  "generatedAt": "2026-10-23T22:10:50+08:00",
+  "runtime": {
+    "dsh": "0.2.0-rc.2",
+    "model": "deepseek-official/deepseek-flash",
+    "surface": "headless one-shot"
+  },
+  "arms": {
+    "default": { "mode": "default" },
+    "fast": { "mode": "turbo", "gear": "fast", "reasoningEffort": "low" },
+    "max": { "mode": "turbo", "gear": "max", "reasoningEffort": "high" }
+  },
+  "rules": {
+    "order": "rotating Latin square",
+    "freshWorkspacePerRun": true,
+    "latencyAndTokenAggregates": "machine-validated runs only",
+    "pairedDelta": "same task and round, all requested arms passed",
+    "timeouts": "excluded even if output files happen to pass"
+  },
+  "experiments": [
+    {
+      "id": "sum-js-repeat-3",
+      "catalog": "benchmark/tasks.json",
+      "summary": {
+        "completePairedRounds": 3,
+        "default": { "passed": 3, "runs": 3, "medianWallMs": 31413, "meanWallMs": 33270, "meanInputTokens": 2940, "meanOutputTokens": 3417 },
+        "fast": { "passed": 3, "runs": 3, "medianWallMs": 41606, "meanWallMs": 37664, "medianDeltaVsDefaultPct": 32.4, "meanInputTokens": 3421, "meanOutputTokens": 3422 },
+        "max": { "passed": 3, "runs": 3, "medianWallMs": 28625, "meanWallMs": 38874, "medianDeltaVsDefaultPct": -8.9, "meanInputTokens": 3391, "meanOutputTokens": 4062 }
+      },
+      "runs": [
+        { "round": 1, "arm": "default", "wallMs": 37481, "passed": true, "inputTokens": 3081, "outputTokens": 3965, "reasoningTokens": 0, "cacheReadTokens": 102525 },
+        { "round": 1, "arm": "fast", "wallMs": 41606, "passed": true, "inputTokens": 4067, "outputTokens": 4079, "reasoningTokens": 0, "cacheReadTokens": 134528 },
+        { "round": 1, "arm": "max", "wallMs": 67102, "passed": true, "inputTokens": 5393, "outputTokens": 7460, "reasoningTokens": 0, "cacheReadTokens": 187264 },
+        { "round": 2, "arm": "fast", "wallMs": 24137, "passed": true, "inputTokens": 2526, "outputTokens": 1851, "reasoningTokens": 0, "cacheReadTokens": 77568 },
+        { "round": 2, "arm": "max", "wallMs": 28625, "passed": true, "inputTokens": 2653, "outputTokens": 2833, "reasoningTokens": 0, "cacheReadTokens": 73856 },
+        { "round": 2, "arm": "default", "wallMs": 31413, "passed": true, "inputTokens": 2628, "outputTokens": 3413, "reasoningTokens": 0, "cacheReadTokens": 75261 },
+        { "round": 3, "arm": "max", "wallMs": 20895, "passed": true, "inputTokens": 2126, "outputTokens": 1892, "reasoningTokens": 0, "cacheReadTokens": 61696 },
+        { "round": 3, "arm": "default", "wallMs": 30915, "passed": true, "inputTokens": 3111, "outputTokens": 2872, "reasoningTokens": 0, "cacheReadTokens": 84989 },
+        { "round": 3, "arm": "fast", "wallMs": 47248, "passed": true, "inputTokens": 3671, "outputTokens": 4336, "reasoningTokens": 0, "cacheReadTokens": 145280 }
+      ]
+    },
+    {
+      "id": "regional-calibration",
+      "catalog": "benchmark/tasks-overdrive.json",
+      "summary": {
+        "completePairedRounds": 1,
+        "default": { "passed": 1, "runs": 1, "wallMs": 91063 },
+        "fast": { "passed": 1, "runs": 1, "wallMs": 50595, "deltaVsDefaultPct": -44.4 },
+        "max": { "passed": 1, "runs": 1, "wallMs": 94827, "deltaVsDefaultPct": 4.1 }
+      },
+      "runs": [
+        { "task": "regional-totals", "round": 1, "arm": "default", "wallMs": 91063, "passed": true, "inputTokens": 10041, "outputTokens": 10539, "reasoningTokens": 0, "cacheReadTokens": 307840 },
+        { "task": "regional-totals", "round": 1, "arm": "fast", "wallMs": 50595, "passed": true, "inputTokens": 5336, "outputTokens": 5992, "reasoningTokens": 0, "cacheReadTokens": 165888 },
+        { "task": "regional-totals", "round": 1, "arm": "max", "wallMs": 94827, "passed": true, "inputTokens": 17303, "outputTokens": 11782, "reasoningTokens": 0, "cacheReadTokens": 344832 }
+      ]
+    },
+    {
+      "id": "multi-file-2x2",
+      "catalog": "benchmark/tasks-overdrive.json",
+      "summary": {
+        "completePairedRounds": 1,
+        "default": { "passed": 2, "usableRuns": 3, "excludedTimeouts": 1 },
+        "fast": { "passed": 3, "usableRuns": 4, "excludedTimeouts": 0 },
+        "max": { "passed": 2, "usableRuns": 4, "excludedTimeouts": 0 },
+        "onlyCompletePair": {
+          "task": "regional-totals",
+          "round": 1,
+          "defaultWallMs": 65922,
+          "fastWallMs": 72625,
+          "fastDeltaVsDefaultPct": 10.2,
+          "maxWallMs": 80712,
+          "maxDeltaVsDefaultPct": 22.4
+        }
+      },
+      "runs": [
+        { "task": "regional-totals", "round": 1, "arm": "default", "wallMs": 65922, "passed": true, "timedOut": false },
+        { "task": "regional-totals", "round": 1, "arm": "fast", "wallMs": 72625, "passed": true, "timedOut": false },
+        { "task": "regional-totals", "round": 1, "arm": "max", "wallMs": 80712, "passed": true, "timedOut": false },
+        { "task": "dashboard-summary", "round": 1, "arm": "fast", "wallMs": 77851, "passed": true, "timedOut": false },
+        { "task": "dashboard-summary", "round": 1, "arm": "max", "wallMs": 77581, "passed": false, "timedOut": false },
+        { "task": "dashboard-summary", "round": 1, "arm": "default", "wallMs": 117194, "passed": true, "timedOut": false },
+        { "task": "regional-totals", "round": 2, "arm": "fast", "wallMs": 78647, "passed": true, "timedOut": false },
+        { "task": "regional-totals", "round": 2, "arm": "max", "wallMs": 90002, "passed": true, "timedOut": false },
+        { "task": "regional-totals", "round": 2, "arm": "default", "wallMs": 180030, "passed": true, "timedOut": true, "excluded": true },
+        { "task": "dashboard-summary", "round": 2, "arm": "max", "wallMs": 93484, "passed": false, "timedOut": false },
+        { "task": "dashboard-summary", "round": 2, "arm": "default", "wallMs": 39140, "passed": false, "timedOut": false },
+        { "task": "dashboard-summary", "round": 2, "arm": "fast", "wallMs": 37264, "passed": false, "timedOut": false }
+      ]
+    }
+  ],
+  "conclusion": "No reproducible fixed speedup. Fast and Max are execution preferences; publish pass rate beside latency and token usage."
+}

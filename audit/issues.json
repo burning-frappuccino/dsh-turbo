@@ -1,0 +1,342 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "plugin-audit",
+  "generatedAt": "2026-10-23T22:10:50+08:00",
+  "generator": "manual audit (assistant) against the working tree",
+  "subject": {
+    "name": "dsh-turbo",
+    "version": "0.2.2",
+    "gitHead": "be07e50",
+    "gitHeadTime": "2026-10-23T13:32:56+08:00",
+    "workingTreeDirty": true,
+    "repository": "."
+  },
+  "environment": {
+    "dshVersion": "0.2.0-rc.2",
+    "dshSurface": "desktop",
+    "profile": "desktop",
+    "profilePath": "%USERPROFILE%\\.dsh\\profiles\\desktop",
+    "gui": "http://127.0.0.1:19387",
+    "node": "24.18.0",
+    "os": "Windows",
+    "powershell": "5.1 and 7 exercised"
+  },
+  "gates": [
+    {
+      "id": "typecheck",
+      "command": "pnpm exec tsc --noEmit",
+      "result": "pass",
+      "detail": "strict, no diagnostics",
+      "checkedAt": "2026-10-23T21:35:00+08:00"
+    },
+    {
+      "id": "build-freshness",
+      "command": "node scripts/build.mjs --check",
+      "result": "pass",
+      "detail": "lib/ matches src/",
+      "checkedAt": "2026-10-23T21:35:00+08:00"
+    },
+    {
+      "id": "unit-tests",
+      "command": "node --test tests/*.test.mjs",
+      "result": "pass",
+      "detail": "45 tests, 45 passed, 0 failed",
+      "checkedAt": "2026-10-23T21:35:00+08:00"
+    },
+    {
+      "id": "live-host-bridge",
+      "command": "GET http://127.0.0.1:19387/api/dsh-turbo/health",
+      "result": "fail",
+      "detail": "HTTP 401: the dsh-turbo row is not active in the running process (see TURBO-001)",
+      "checkedAt": "2026-10-23T21:35:00+08:00"
+    },
+    {
+      "id": "installer-script",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop",
+      "result": "pass",
+      "detail": "exit 0, dependency verified from the profile manifest",
+      "checkedAt": "2026-10-23T21:31:00+08:00"
+    }
+  ],
+  "issues": [
+    {
+      "id": "TURBO-001",
+      "severity": "high",
+      "category": "runtime-activation",
+      "status": "fixed",
+      "title": "A version update deactivates the row until the process restarts",
+      "summary": "Cordis/Node cache modules by resolved path, so a running process may keep the old module while the profile gains new config keys. resolveConfig now warns and ignores unknown keys, preventing future config-first updates from deactivating the row.",
+      "evidence": [
+        "GOOD: GET /api/dsh-turbo/health -> 200 with version 0.1.0 before the update",
+        "BAD:  GET /api/dsh-turbo/health -> 401 after the profile recomposed with the 0.2.1 patch",
+        "config keys in cordis.patch.yml known only to 0.2.1: maxReasoningEffort, defaultGear",
+        "fixed: src/host/plugin.ts resolveConfig accepts an onUnknown callback and continues with known keys",
+        "fixed: apply logs ignored keys through the Cordis logger"
+      ],
+      "impact": "The user sees the feature vanish after updating and cannot tell a crash from a disabled plugin.",
+      "recommendation": {
+        "action": "Done: unknown keys are warned and ignored, while invalid values for known keys still fail loudly.",
+        "effort": "S",
+        "risk": "low"
+      },
+      "relatedFiles": ["src/host/plugin.ts", "cordis.patch.yml"],
+      "workaround": "One restart is still required to load this fix into a process already running the older module."
+    },
+    {
+      "id": "TURBO-002",
+      "severity": "high",
+      "category": "product-claim",
+      "status": "open",
+      "title": "No reproducible end-to-end speedup has been demonstrated",
+      "summary": "Two interleaved 20-task sweeps produced opposite signs at the median (-35% in sweep 1, +12% in sweep 2), and task-level deltas ranged -78% to +257%. The composition mounts no optional stage Turbo can remove, so the policy only nudges model behaviour.",
+      "evidence": [
+        "PERFORMANCE.md section 2 (sweep 1): turbo median 28 952 ms vs default 44 636 ms, turbo 7/9 passed vs default 9/9",
+        "PERFORMANCE.md section 3 (sweep 2): turbo median 33 638 ms vs default 29 980 ms, turbo 19/20 passed vs default 18/19",
+        "benchmark/smoke-three-arm-keep.md: single task, fast -8.3%, max -9.2%",
+        "benchmark/paired-ui-sample.json: one paired UI sample, -29.2%, different task, single run, token figure includes cache reads",
+        "PERFORMANCE.md section 4.3: sum-js repeat 3 passed 9/9; Fast median +32.4% slower, Max median -8.9% but mean +16.8% slower",
+        "PERFORMANCE.md section 4.3: multi-file complete pair had Fast +10.2% and Max +22.4%; Max passed only 2/4 runs"
+      ],
+      "impact": "Any published multiplier would be unsupported. The honest positioning is 'switchable, observable execution preference'.",
+      "recommendation": {
+        "action": "Run --repeat 3 or higher over a larger task set before making any speed claim; report pass rate next to latency.",
+        "effort": "M",
+        "risk": "none"
+      },
+      "relatedFiles": ["PERFORMANCE.md", "scripts/benchmark.mjs", "benchmark/tasks.json"],
+      "workaround": "Keep Turbo OFF by default (current defaultMode: default) and let users decide per session."
+    },
+    {
+      "id": "TURBO-003",
+      "severity": "medium",
+      "category": "configuration",
+      "status": "fixed",
+      "title": "The fast and max gears currently select the same reasoning effort",
+      "summary": "Fast now uses low effort and Max uses high effort. The gears remain different in policy text and now also select distinct request effort.",
+      "evidence": [
+        "cordis.patch.yml: reasoningEffort: low",
+        "fixed: cordis.patch.yml sets maxReasoningEffort: high",
+        "fixed: scripts/benchmark.mjs pins Fast=low and Max=high through the same plugin config"
+      ],
+      "impact": "Three-arm results overstate the difference between gears; the 'max' arm is not a stronger-reasoning arm.",
+      "recommendation": {
+        "action": "Done: maxReasoningEffort is high and the benchmark patch preserves the distinction.",
+        "effort": "S",
+        "risk": "low"
+      },
+      "relatedFiles": ["cordis.patch.yml", "src/host/runtime-adapter.ts"],
+      "workaround": "None. Re-run the three-arm benchmark because earlier Fast/Max numbers used equal effort."
+    },
+    {
+      "id": "TURBO-004",
+      "severity": "medium",
+      "category": "measurement",
+      "status": "open",
+      "title": "The reasoning-effort lever is applied but its effect is not observable in metrics",
+      "summary": "The request header really does carry the configured effort (verified after the prepend fix), yet every arm reports reasoningTokens 0, so nothing proves the lever reduces thinking or latency.",
+      "evidence": [
+        "session log request/header config: {\"provider\":\"deepseek-official\",\"model\":\"deepseek-flash\",\"reasoningEffort\":\"low\"}",
+        "benchmark/smoke-three-arm-keep.md: reasoning tok = 0 for default, fast and max",
+        "evidence.jsonl confirms Max reasoningEffort=high on every pre-step, but formal-sum-js-3x still reports reasoningTokens=0 for all 9 runs"
+      ],
+      "impact": "The plugin's strongest latency lever is an assumption, not a measurement.",
+      "recommendation": {
+        "action": "Find a proxy metric that actually moves (output tokens, first-token latency, or wall clock on a reasoning-heavy task), or confirm the provider reports reasoning usage at all.",
+        "effort": "M",
+        "risk": "none"
+      },
+      "relatedFiles": ["src/host/runtime-adapter.ts", "scripts/benchmark.mjs"],
+      "workaround": "Compare wall clock and output tokens, not reasoningTokens."
+    },
+    {
+      "id": "TURBO-005",
+      "severity": "medium",
+      "category": "honesty",
+      "status": "documented",
+      "title": "Verification detection recognises commands, not outcomes",
+      "summary": "The 'verification ran' metric matches shell command text against test/build/lint patterns. It proves a command was attempted, never that it succeeded, and it is presented next to metrics that do imply outcomes.",
+      "evidence": [
+        "src/host/metrics.ts VERIFICATION_COMMAND regex",
+        "src/host/metrics.ts looksLikeVerification() is driven by tool/call arguments only",
+        "UI row label: 'Verification ran' / '是否执行了测试'"
+      ],
+      "impact": "A user can read 'verification: yes' as 'tests passed'.",
+      "recommendation": {
+        "action": "Keep the label as an observation and state it in the UI tooltip and README ('a command was attempted, not that it passed').",
+        "effort": "S",
+        "risk": "none"
+      },
+      "relatedFiles": ["src/host/metrics.ts", "src/client/turbo-toggle.tsx"],
+      "workaround": "Read the session log's tool/result isError for outcome."
+    },
+    {
+      "id": "TURBO-006",
+      "severity": "low",
+      "category": "measurement",
+      "status": "open",
+      "title": "In-flight turns are invisible in the metrics panel",
+      "summary": "Session metrics summarise completed turns only, so during the first or current turn the panel shows 'turns 0' and dashes.",
+      "evidence": [
+        "src/host/metrics.ts summary() returns nulls when no completed record exists",
+        "Live probe during an active turn returned turns=0, all metrics null"
+      ],
+      "impact": "Cosmetic confusion; looks like metrics are broken on a fresh session.",
+      "recommendation": {
+        "action": "Expose the live turn (mode, steps so far, elapsed) separately from completed-turn aggregates.",
+        "effort": "S",
+        "risk": "low"
+      },
+      "relatedFiles": ["src/host/metrics.ts", "src/host/runtime-adapter.ts"],
+      "workaround": "Read evidence.jsonl turn-end lines directly."
+    },
+    {
+      "id": "TURBO-007",
+      "severity": "low",
+      "category": "efficiency",
+      "status": "accepted",
+      "title": "The toggle polls the bridge every 2.5 s",
+      "summary": "Cross-tab convergence is achieved by polling plus the revision guard rather than a pushed event.",
+      "evidence": [
+        "src/client/turbo-toggle.tsx POLL_MS = 2500",
+        "src/host/plugin.ts revision guard returns 409 on a stale write"
+      ],
+      "impact": "Negligible on loopback; unnecessary traffic in principle.",
+      "recommendation": {
+        "action": "Only worth fixing with a gateway event; keep polling until then.",
+        "effort": "L",
+        "risk": "low"
+      },
+      "relatedFiles": ["src/client/turbo-toggle.tsx"],
+      "workaround": "None needed."
+    },
+    {
+      "id": "TURBO-008",
+      "severity": "low",
+      "category": "ui",
+      "status": "open",
+      "title": "Narrow-screen layout is only guarded by CSS",
+      "summary": "A media query collapses the ON label to the bolt glyph below 640 px, but it has not been verified in a real narrow window.",
+      "evidence": [
+        "src/client/turbo-toggle.tsx TURBO_CSS @media (max-width:640px)"
+      ],
+      "impact": "Possible overlap with the model selector on very narrow composers.",
+      "recommendation": {
+        "action": "Verify at ~380 px composer width and screenshot it.",
+        "effort": "S",
+        "risk": "none"
+      },
+      "relatedFiles": ["src/client/turbo-toggle.tsx"],
+      "workaround": "None."
+    },
+    {
+      "id": "TURBO-009",
+      "severity": "medium",
+      "category": "compatibility",
+      "status": "open",
+      "title": "Only DSH 0.2.0-rc.2 was actually exercised",
+      "summary": "The manifest declares dsh.engines >=0.2.0-rc.1 and marks 0.2.0-rc.2 as tested; every other version is an unverified claim. The plugin leans on observed, not documented, shapes (slot names, hook payload fields, asar layout).",
+      "evidence": [
+        "package.json dsh.engines + dsh.compatibility",
+        "compatibility-report.md sections 2 and 3 cite source lines from 0.2.0-rc.2 only",
+        "tests/compatibility.test.mjs encodes 0.2.0-rc.2 facts"
+      ],
+      "impact": "A DSH upgrade can break the plugin in ways no current test predicts.",
+      "recommendation": {
+        "action": "Run the compatibility suite against each release before widening the declared range.",
+        "effort": "M",
+        "risk": "none"
+      },
+      "relatedFiles": ["package.json", "tests/compatibility.test.mjs"],
+      "workaround": "Pin the DSH version in deployments."
+    },
+    {
+      "id": "TURBO-010",
+      "severity": "high",
+      "category": "tooling",
+      "status": "fixed",
+      "title": "install.ps1 crashed under Windows PowerShell 5.1",
+      "summary": "Four defects: $MyInvocation.MyCommand.Path is empty inside a param() default; app.asar was treated as a directory; a GUI-subsystem executable was not awaited so $LASTEXITCODE was unset; non-ASCII bullets were mis-decoded as ANSI.",
+      "evidence": [
+        "before: Split-Path : cannot bind argument to parameter 'Path' because it is null (install.ps1:33)",
+        "before: 'npm add failed with exit code ' with an empty code",
+        "before: mojibake 鈥? instead of bullet glyphs",
+        "after: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop -> exit 0",
+        "after: both scripts parse with 0 errors and contain 0 non-ASCII characters"
+      ],
+      "impact": "Installation and update appeared broken on the default Windows shell.",
+      "recommendation": {
+        "action": "Done: resolve defaults after binding, test the asar file, prefer pnpm and verify from the profile manifest, ASCII + UTF-8 BOM output, health probe with retries.",
+        "effort": "S",
+        "risk": "none"
+      },
+      "relatedFiles": ["scripts/install.ps1", "scripts/uninstall.ps1"],
+      "workaround": "Use the fixed scripts."
+    },
+    {
+      "id": "TURBO-011",
+      "severity": "medium",
+      "category": "configuration",
+      "status": "fixed",
+      "title": "An unsupported reasoning effort could fail entire turns",
+      "summary": "The shipped DeepSeek Messages adapter accepts only off|low|high|max. A configured 'minimal' made every Turbo turn end with UNSUPPORTED_REASONING_EFFORT before the self-healing path existed.",
+      "evidence": [
+        "before: dsh: UNSUPPORTED_REASONING_EFFORT: provider \"deepseek-official\" model \"deepseek-flash\" does not support reasoning effort \"minimal\"",
+        "adapter source: dsh-llm-deepseek accepted set [off, low, high, max]",
+        "after: agent/request-error handler disables the lever for that agent and returns { kind: 'retry' }",
+        "after: probe with reasoningEffort low -> request/header carries low, run exits 0"
+      ],
+      "impact": "A configuration mistake used to be fatal per turn; now it degrades and is reported.",
+      "recommendation": {
+        "action": "Done: route refusal disables the lever, writes an effort-disabled evidence line, and the capability row explains it.",
+        "effort": "S",
+        "risk": "none"
+      },
+      "relatedFiles": ["src/host/runtime-adapter.ts", "src/host/plugin.ts"],
+      "workaround": "Keep reasoningEffort at 'inherit' until a route-supported value is chosen."
+    },
+    {
+      "id": "TURBO-012",
+      "severity": "medium",
+      "category": "tooling",
+      "status": "fixed",
+      "title": "Bare pnpm audit/issues commands ran package-manager commands instead of the issue gate",
+      "summary": "pnpm reserves both audit and issues. Package scripts with those names require pnpm run, while the bare commands reported dependency or repository information and never validated audit/issues.json.",
+      "evidence": [
+        "observed: pnpm audit printed 'No known vulnerabilities found' without rendering audit/ISSUES.md",
+        "observed: pnpm issues printed the repository Issues URL without rendering audit/ISSUES.md",
+        "fixed: package scripts are named check:issues and check:issues:strict",
+        "verified: pnpm run check:issues runs check-issues.mjs and refreshes the Markdown view"
+      ],
+      "impact": "A developer could believe the machine-readable issue registry passed when it was never checked.",
+      "recommendation": {
+        "action": "Done: use pnpm run check:issues for validation/rendering and pnpm run check:issues:strict for the high-severity gate.",
+        "effort": "S",
+        "risk": "none"
+      },
+      "relatedFiles": ["package.json", "scripts/check-issues.mjs", "audit/issues.json"],
+      "workaround": "Use node scripts/check-issues.mjs directly on older checkouts."
+    }
+  ],
+  "counts": {
+    "total": 12,
+    "open": 5,
+    "fixed": 5,
+    "documented": 1,
+    "accepted": 1,
+    "bySeverity": {
+      "critical": 0,
+      "high": 3,
+      "medium": 6,
+      "low": 3
+    }
+  },
+  "suggestedOrder": [
+    "TURBO-002",
+    "TURBO-004",
+    "TURBO-009",
+    "TURBO-005",
+    "TURBO-006",
+    "TURBO-008",
+    "TURBO-007"
+  ]
+}

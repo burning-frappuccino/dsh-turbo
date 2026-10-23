@@ -16,6 +16,17 @@ test('a new Session reads as Turbo OFF with revision 0', () => {
   assert.deepEqual(store.get(SESSION), { sessionId: SESSION, mode: 'default', gear: 'fast', revision: 0, updatedAt: 0 })
 })
 
+test('a deployment can make new Turbo Sessions start in Max gear', () => {
+  const store = new TurboSessionStore({ defaultMode: 'turbo', defaultGear: 'max' })
+  assert.deepEqual(store.get(SESSION), {
+    sessionId: SESSION,
+    mode: 'turbo',
+    gear: 'max',
+    revision: 0,
+    updatedAt: 0,
+  })
+})
+
 test('an accepted write bumps the revision and keeps one record per Session', () => {
   const store = new TurboSessionStore({ now: () => 1000 })
   const first = store.set(SESSION, 'turbo')

@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * Turbo ON/OFF benchmark harness (Phase 3).
+ * Default / Fast / Max benchmark harness.
  *
  * Design (see compatibility-report.md §7 for why this surface):
  * - one headless DSH run per measurement: `dsh --profile <bench> --json "<task>"`
  *   on the SAME 0.2.0 runtime the GUI uses;
  * - a fresh workspace per run, seeded from the task's `seed` so both arms start
  *   from identical bytes;
- * - the only difference between arms is `dsh-turbo.config.defaultMode`, applied
- *   as a `--patch` overlay — same profile, same model, same tools, same safety;
- * - arms are interleaved per task and the order flips on odd task indexes, so
- *   cache warm-up and time-of-day drift do not favour one arm.
+ * - the only differences between arms are the plugin mode, gear and its
+ *   configured effort — same model, tools and safety;
+ * - a rotating Latin-square order interleaves all three arms per task so cache
+ *   warm-up and time-of-day drift do not consistently favour one arm.
  *
  * Measurements come from the runner's own event stream (not from reply length):
  * wall-clock, first-token latency, model steps, tool calls, tokens, whether a
@@ -19,7 +19,7 @@
  * Usage:
  *   node scripts/benchmark.mjs --profile turbo-bench --limit 3
  *   node scripts/benchmark.mjs --profile turbo-bench --tasks sum-js,fix-offbyone
- *   node scripts/benchmark.mjs --profile turbo-bench --repeat 2 --out PERFORMANCE.md
+ *   node scripts/benchmark.mjs --profile turbo-bench --repeat 2 --out PERFORMANCE-OVERDRIVE.md
  */
 
 import { spawn } from 'node:child_process'
@@ -30,8 +30,10 @@ import { execFileSync } from 'node:child_process'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const HOME = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? process.env.HOME ?? '.', '.dsh')
-const HARNESS = process.env.DSH_EXE ??
-  'C:\\Users\\19128\\AppData\\Local\\Programs\\DeepSeek Harness\\DeepSeek Harness.exe'
+const HARNESS = process.env.DSH_EXE ?? join(
+  process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? '.', 'AppData', 'Local'),
+  'Programs', 'DeepSeek Harness', 'DeepSeek Harness.exe',
+)
 const CLI = process.env.DSH_CLI ??
   join(dirname(HARNESS), 'resources', 'app.asar', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js')
 
@@ -46,13 +48,28 @@ if (args.includes('--help')) {
   process.exit(0)
 }
 const profile = arg('--profile', 'turbo-bench')
+const catalogFile = arg('--catalog', 'benchmark/tasks.json')
 const limit = Number(arg('--limit', '0'))
 const only = (arg('--tasks', '') ?? '').split(',').map((value) => value.trim()).filter(Boolean)
 const repeat = Number(arg('--repeat', '1'))
 const outFile = arg('--out', '')
 const keepWorkspaces = args.includes('--keep')
+const requestedArms = (arg('--arms', 'default,fast,max') ?? '')
+  .split(',').map((value) => value.trim()).filter(Boolean)
 
-const catalog = JSON.parse(readFileSync(join(root, 'benchmark', 'tasks.json'), 'utf8'))
+const ARM_CONFIG = Object.freeze({
+  default: { defaultMode: 'default', defaultGear: 'fast', reasoningEffort: 'low', maxReasoningEffort: 'high' },
+  fast: { defaultMode: 'turbo', defaultGear: 'fast', reasoningEffort: 'low', maxReasoningEffort: 'high' },
+  max: { defaultMode: 'turbo', defaultGear: 'max', reasoningEffort: 'low', maxReasoningEffort: 'high' },
+})
+const arms = [...new Set(requestedArms)]
+if (arms.length < 1 || arms.some((arm) => ARM_CONFIG[arm] === undefined)) {
+  console.error('--arms must contain values from default,fast,max')
+  process.exit(1)
+}
+
+const catalogPath = resolve(root, catalogFile)
+const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'))
 let tasks = catalog.tasks
 if (only.length > 0) tasks = tasks.filter((task) => only.includes(task.id))
 if (limit > 0) tasks = tasks.slice(0, limit)
@@ -68,29 +85,33 @@ const results = []
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-/** Write a `--patch` overlay that pins the Turbo default mode for one arm. */
-function patchFor(mode, index) {
-  const file = join(runRoot, `patch-${mode}-${index}.yml`)
+/** Write a `--patch` overlay that pins mode, gear and gear-specific effort. */
+function patchFor(arm, index) {
+  const config = ARM_CONFIG[arm]
+  const file = join(runRoot, `patch-${arm}-${index}.yml`)
   writeFileSync(file, [
     '- id: dsh-turbo',
     '  name: dsh-turbo',
     '  config:',
     '    evidenceLog: true',
-    `    storageDir: dsh-turbo-bench-${mode}`,
-    `    defaultMode: ${mode}`,
+    `    storageDir: dsh-turbo-bench-${arm}`,
+    `    defaultMode: ${config.defaultMode}`,
+    `    defaultGear: ${config.defaultGear}`,
+    `    reasoningEffort: ${config.reasoningEffort}`,
+    `    maxReasoningEffort: ${config.maxReasoningEffort}`,
     '',
   ].join('\n'), 'utf8')
   return file
 }
 
 /** Run one headless task and fold its event stream into measurements. */
-function runOne(task, mode, index, attempt = 1) {
-  const workspace = join(runRoot, `${stamp}-${task.id}-${mode}-${index}-a${attempt}`)
+function runOne(task, arm, index, round, attempt = 1) {
+  const workspace = join(runRoot, `${stamp}-${task.id}-${arm}-${index}-r${round}-a${attempt}`)
   mkdirSync(workspace, { recursive: true })
   for (const [name, content] of Object.entries(task.seed ?? {})) {
     writeFileSync(join(workspace, name), content, 'utf8')
   }
-  const patch = patchFor(mode, index)
+  const patch = patchFor(arm, index)
   const started = Date.now()
   const child = spawn(HARNESS, [
     '--expose-internals', CLI,
@@ -145,6 +166,13 @@ function runOne(task, mode, index, attempt = 1) {
 
       const steps = events.filter((event) => event.type === 'status' && event.phase === 'step_start').length
       const toolCalls = events.filter((event) => event.type === 'tool_call')
+      const callsByStep = new Map()
+      for (const event of toolCalls) {
+        const step = Number.isFinite(event.step) ? event.step : null
+        if (step === null) continue
+        callsByStep.set(step, (callsByStep.get(step) ?? 0) + 1)
+      }
+      const callsPerStep = [...callsByStep.values()]
       const turnEnd = events.find((event) => event.type === 'status' && event.phase === 'turn_end')
       // The runner's projection uses `tool` + `input`; a provider outage shows up
       // as `dsh: TRANSPORT: …` on stderr with turnEnd.kind === 'error'. Those runs
@@ -165,11 +193,15 @@ function runOne(task, mode, index, attempt = 1) {
       const passed = checkTask(task, workspace)
       const result = {
         task: task.id,
-        mode,
+        arm,
         index,
+        round,
         wallMs,
         steps,
         toolCalls: toolCalls.length,
+        maxCallsPerStep: callsPerStep.length === 0 ? null : Math.max(...callsPerStep),
+        parallelToolSteps: callsPerStep.filter((count) => count > 1).length,
+        toolEventKeys: [...new Set(toolCalls.flatMap((event) => Object.keys(event)))].sort(),
         toolNames: [...new Set(toolCalls.map(toolName))].filter(Boolean),
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
@@ -233,127 +265,178 @@ const delay = (ms) => new Promise((done) => setTimeout(done, ms))
  * of times; a run that still fails is recorded with `excluded: true` and kept
  * out of the summary instead of silently counting as a Turbo (or default) loss.
  */
-async function runWithRetry(task, mode, index) {
+async function runWithRetry(task, arm, index, round) {
   const attempts = 3
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const result = await runOne(task, mode, index, attempt)
+    const result = await runOne(task, arm, index, round, attempt)
+    if (result.timedOut) return { ...result, excluded: true, exclusionReason: 'timeout' }
     if (!result.transportFailed) return result
     if (attempt < attempts) {
       console.log(`transport failure, retrying (${attempt}/${attempts - 1})…`)
       await delay(5000)
       continue
     }
-    return { ...result, excluded: true }
+    return { ...result, excluded: true, exclusionReason: 'provider transport failure after retries' }
   }
   return undefined
 }
 
 // ── main loop ────────────────────────────────────────────────────────────────
-console.log(`dsh-turbo benchmark — profile=${profile} tasks=${tasks.length} repeat=${repeat}`)
+console.log(`dsh-overdrive benchmark — profile=${profile} arms=${arms.join(',')} tasks=${tasks.length} repeat=${repeat}`)
 console.log(`runtime: ${HARNESS}`)
 
 for (let round = 1; round <= repeat; round += 1) {
   for (const [index, task] of tasks.entries()) {
-    // Interleave: alternate which arm goes first so neither always warms the cache.
-    const order = (index + round) % 2 === 0 ? ['turbo', 'default'] : ['default', 'turbo']
-    for (const mode of order) {
-      process.stdout.write(`[${round}.${index + 1}] ${task.id.padEnd(16)} ${mode.padEnd(8)} `)
-      const result = await runWithRetry(task, mode, index)
+    // Rotating Latin square: every arm occupies every order position.
+    const offset = (index + round - 1) % arms.length
+    const order = [...arms.slice(offset), ...arms.slice(0, offset)]
+    for (const arm of order) {
+      process.stdout.write(`[${round}.${index + 1}] ${task.id.padEnd(16)} ${arm.padEnd(8)} `)
+      const result = await runWithRetry(task, arm, index, round)
       results.push(result)
       console.log(result.excluded === true
-        ? `EXCLUDED (provider transport failure after retries)`
+        ? `EXCLUDED (${result.exclusionReason})`
         : `wall=${result.wallMs}ms steps=${result.steps} tools=${result.toolCalls} pass=${result.passed ? 'y' : 'n'}`)
     }
   }
 }
 
 // ── summary ──────────────────────────────────────────────────────────────────
-const arms = ['turbo', 'default']
 const usable = results.filter((row) => row.excluded !== true)
 const excluded = results.length - usable.length
 const summary = {}
 for (const arm of arms) {
-  const rows = usable.filter((row) => row.mode === arm)
-  const wall = rows.map((row) => row.wallMs)
+  const rows = usable.filter((row) => row.arm === arm)
+  const validRows = rows.filter((row) => row.passed)
+  const wall = validRows.map((row) => row.wallMs)
   summary[arm] = {
     runs: rows.length,
-    passed: rows.filter((row) => row.passed).length,
-    successRate: rows.length === 0 ? null : Number((rows.filter((row) => row.passed).length / rows.length).toFixed(3)),
+    passed: validRows.length,
+    successRate: rows.length === 0 ? null : Number((validRows.length / rows.length).toFixed(3)),
+    validRuns: validRows.length,
     medianWallMs: pct(wall, 50),
     meanWallMs: mean(wall),
     p90WallMs: pct(wall, 90),
-    meanSteps: mean(rows.map((row) => row.steps)),
-    meanToolCalls: mean(rows.map((row) => row.toolCalls)),
-    meanInputTokens: mean(rows.map((row) => row.inputTokens)),
-    meanOutputTokens: mean(rows.map((row) => row.outputTokens)),
-    verificationRuns: rows.filter((row) => row.verificationObserved).length,
-    meanFinalChars: mean(rows.map((row) => row.finalChars)),
+    meanSteps: mean(validRows.map((row) => row.steps)),
+    meanToolCalls: mean(validRows.map((row) => row.toolCalls)),
+    meanMaxCallsPerStep: mean(validRows.map((row) => row.maxCallsPerStep).filter((value) => value !== null)),
+    parallelToolRuns: validRows.filter((row) => row.parallelToolSteps > 0).length,
+    meanInputTokens: mean(validRows.map((row) => row.inputTokens)),
+    meanOutputTokens: mean(validRows.map((row) => row.outputTokens)),
+    meanReasoningTokens: mean(validRows.map((row) => row.reasoningTokens)),
+    meanCacheReadTokens: mean(validRows.map((row) => row.cacheReadTokens)),
+    medianFirstTokenMs: pct(validRows.map((row) => row.firstTokenMs).filter((value) => value !== null), 50),
+    verificationRuns: validRows.filter((row) => row.verificationObserved).length,
+    meanFinalChars: mean(validRows.map((row) => row.finalChars)),
   }
 }
 
-const paired = []
+const pairedRounds = []
 for (const task of tasks) {
-  const on = usable.filter((row) => row.task === task.id && row.mode === 'turbo').map((row) => row.wallMs)
-  const off = usable.filter((row) => row.task === task.id && row.mode === 'default').map((row) => row.wallMs)
-  if (on.length === 0 || off.length === 0) continue
-  const medianOn = pct(on, 50)
-  const medianOff = pct(off, 50)
-  paired.push({
-    task: task.id,
-    turboMs: medianOn,
-    defaultMs: medianOff,
-    deltaPct: medianOff === 0 ? null : Number((((medianOn - medianOff) / medianOff) * 100).toFixed(1)),
-    turboPassed: usable.filter((row) => row.task === task.id && row.mode === 'turbo').every((row) => row.passed),
-    defaultPassed: usable.filter((row) => row.task === task.id && row.mode === 'default').every((row) => row.passed),
-    turboSteps: mean(usable.filter((row) => row.task === task.id && row.mode === 'turbo').map((row) => row.steps)),
-    defaultSteps: mean(usable.filter((row) => row.task === task.id && row.mode === 'default').map((row) => row.steps)),
-  })
+  for (let round = 1; round <= repeat; round += 1) {
+    const armRows = Object.fromEntries(arms.map((arm) => [
+      arm,
+      usable.find((result) => result.task === task.id && result.arm === arm && result.round === round),
+    ]))
+    if (!arms.every((arm) => armRows[arm]?.passed === true)) continue
+    const row = { task: task.id, round, arms: {} }
+    for (const arm of arms) {
+      const result = armRows[arm]
+      row.arms[arm] = {
+        wallMs: result.wallMs,
+        steps: result.steps,
+        toolCalls: result.toolCalls,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        reasoningTokens: result.reasoningTokens,
+        cacheReadTokens: result.cacheReadTokens,
+      }
+    }
+    const baseline = row.arms.default?.wallMs
+    for (const arm of arms) {
+      const value = row.arms[arm]?.wallMs
+      if (arm === 'default' || baseline === undefined || baseline === 0 || value === undefined) continue
+      row.arms[arm].deltaVsDefaultPct = Number((((value - baseline) / baseline) * 100).toFixed(1))
+    }
+    pairedRounds.push(row)
+  }
 }
 
+const paired = tasks.map((task) => {
+  const rounds = pairedRounds.filter((row) => row.task === task.id)
+  if (rounds.length === 0) return undefined
+  const row = { task: task.id, validRounds: rounds.length, arms: {} }
+  for (const arm of arms) {
+    row.arms[arm] = {
+      medianWallMs: pct(rounds.map((item) => item.arms[arm].wallMs), 50),
+      meanSteps: mean(rounds.map((item) => item.arms[arm].steps)),
+      meanToolCalls: mean(rounds.map((item) => item.arms[arm].toolCalls)),
+      meanInputTokens: mean(rounds.map((item) => item.arms[arm].inputTokens)),
+    }
+  }
+  const baseline = row.arms.default?.medianWallMs
+  for (const arm of arms) {
+    const value = row.arms[arm]?.medianWallMs
+    if (arm === 'default' || baseline === undefined || baseline === 0 || value === undefined) continue
+    row.arms[arm].deltaVsDefaultPct = Number((((value - baseline) / baseline) * 100).toFixed(1))
+  }
+  return row
+}).filter(Boolean)
+
 const report = {
-  schemaVersion: 1,
+  schemaVersion: 3,
   generatedAt: new Date().toISOString(),
   profile,
+  catalog: catalogFile,
   runtime: { harness: HARNESS, cli: CLI, dsh: process.env.DSH_VERSION ?? '0.2.0-rc.2' },
   taskCount: tasks.length,
   repeat,
   excludedRuns: excluded,
+  validPairRounds: pairedRounds.length,
   summary,
   paired,
+  pairedRounds,
   results,
 }
 const jsonPath = join(root, 'benchmark', `results-${stamp}.json`)
 writeFileSync(jsonPath, JSON.stringify(report, null, 2), 'utf8')
 
-const deltaMedian = summary.default.medianWallMs === 0 || summary.default.medianWallMs === null
-  ? null
-  : Number((((summary.turbo.medianWallMs - summary.default.medianWallMs) / summary.default.medianWallMs) * 100).toFixed(1))
-
 console.log('\n=== summary ===')
-console.log(`turbo  : n=${summary.turbo.runs} pass=${summary.turbo.passed} median=${summary.turbo.medianWallMs}ms mean=${summary.turbo.meanWallMs}ms p90=${summary.turbo.p90WallMs}ms steps=${summary.turbo.meanSteps} tools=${summary.turbo.meanToolCalls} inTok=${summary.turbo.meanInputTokens}`)
-console.log(`default: n=${summary.default.runs} pass=${summary.default.passed} median=${summary.default.medianWallMs}ms mean=${summary.default.meanWallMs}ms p90=${summary.default.p90WallMs}ms steps=${summary.default.meanSteps} tools=${summary.default.meanToolCalls} inTok=${summary.default.meanInputTokens}`)
-console.log(`paired median delta (turbo vs default): ${deltaMedian === null ? 'n/a' : `${deltaMedian}%`}`)
+for (const arm of arms) {
+  const s = summary[arm]
+  const baseline = summary.default?.medianWallMs
+  const delta = arm === 'default' || baseline === null || baseline === undefined || baseline === 0
+    ? null
+    : Number((((s.medianWallMs - baseline) / baseline) * 100).toFixed(1))
+  console.log(`${arm.padEnd(7)}: n=${s.runs} pass=${s.passed} median=${s.medianWallMs}ms mean=${s.meanWallMs}ms p90=${s.p90WallMs}ms steps=${s.meanSteps} tools=${s.meanToolCalls} inTok=${s.meanInputTokens} outTok=${s.meanOutputTokens} delta=${delta === null ? 'baseline' : `${delta}%`}`)
+}
 console.log(`results: ${jsonPath}`)
 
 if (outFile) {
   const lines = []
-  lines.push('# Turbo ON/OFF benchmark', '')
-  lines.push(`Generated ${report.generatedAt} on DSH ${report.runtime.dsh}, ${tasks.length} tasks × ${repeat} repeat(s), interleaved arms.`)
+  lines.push('# DSH OVERDRIVE three-arm benchmark', '')
+  lines.push(`Generated ${report.generatedAt} on DSH ${report.runtime.dsh}, catalog \`${catalogFile}\`, ${tasks.length} tasks × ${repeat} repeat(s), Latin-square interleaved arms.`)
+  lines.push('Latency and token aggregates include machine-validated runs only. Task deltas include only rounds where every requested arm passed.')
   lines.push('')
-  lines.push('| arm | runs | passed | median | mean | p90 | mean steps | mean tool calls | mean input tokens |')
-  lines.push('|---|---|---|---|---|---|---|---|---|')
-  for (const arm of ['turbo', 'default']) {
+  lines.push('| arm | runs | passed | median | mean | p90 | first token p50 | steps | tools | max calls/step | runs with parallel step | input tok | output tok | reasoning tok | cache read tok |')
+  lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
+  for (const arm of arms) {
     const s = summary[arm]
-    lines.push(`| ${arm} | ${s.runs} | ${s.passed}/${s.runs} | ${s.medianWallMs} ms | ${s.meanWallMs} ms | ${s.p90WallMs} ms | ${s.meanSteps} | ${s.meanToolCalls} | ${s.meanInputTokens} |`)
+    lines.push(`| ${arm} | ${s.runs} | ${s.passed}/${s.runs} | ${s.medianWallMs} ms | ${s.meanWallMs} ms | ${s.p90WallMs} ms | ${s.medianFirstTokenMs} ms | ${s.meanSteps} | ${s.meanToolCalls} | ${s.meanMaxCallsPerStep} | ${s.parallelToolRuns}/${s.runs} | ${s.meanInputTokens} | ${s.meanOutputTokens} | ${s.meanReasoningTokens} | ${s.meanCacheReadTokens} |`)
   }
   lines.push('')
-  lines.push('| task | turbo | default | delta | both passed |')
-  lines.push('|---|---|---|---|---|')
+  lines.push('| task | valid paired rounds | default | fast | fast Δ | max | max Δ |')
+  lines.push('|---|---|---|---|---|---|---|')
   for (const row of paired) {
-    lines.push(`| ${row.task} | ${row.turboMs} ms | ${row.defaultMs} ms | ${row.deltaPct === null ? 'n/a' : `${row.deltaPct}%`} | ${row.turboPassed && row.defaultPassed ? 'yes' : 'no'} |`)
+    const d = row.arms.default
+    const f = row.arms.fast
+    const m = row.arms.max
+    const fastDelta = f?.deltaVsDefaultPct === undefined ? 'n/a' : `${f.deltaVsDefaultPct}%`
+    const maxDelta = m?.deltaVsDefaultPct === undefined ? 'n/a' : `${m.deltaVsDefaultPct}%`
+    lines.push(`| ${row.task} | ${row.validRounds} | ${d?.medianWallMs ?? 'n/a'} ms | ${f?.medianWallMs ?? 'n/a'} ms | ${fastDelta} | ${m?.medianWallMs ?? 'n/a'} ms | ${maxDelta} |`)
   }
   writeFileSync(join(root, outFile), `${lines.join('\n')}\n`, 'utf8')
   console.log(`report: ${outFile}`)
 }
 
-if (existsSync(jsonPath) && summary.turbo.passed + summary.default.passed === 0) process.exitCode = 1
+if (existsSync(jsonPath) && Object.values(summary).every((value) => value.passed === 0)) process.exitCode = 1

@@ -23,9 +23,9 @@
         # an id it refuses disables the lever for that Agent (the turn retries
         # without it) instead of failing.
         reasoningEffort: low
-        # Max keeps low reasoning latency too, but its policy deliberately
-        # spends more token/tool budget on independent work in parallel.
-        maxReasoningEffort: low
+        # Max deliberately spends more reasoning and tool budget. This makes
+        # it a distinct quality-first arm rather than Fast with different copy.
+        maxReasoningEffort: high
         # Append one JSON line per applied policy step to
         # $DSH_HOME/storages/dsh-turbo/evidence.jsonl so "strategy really ran"
         # is provable from logs, not from reply length.
@@ -37,3 +37,6 @@
         # new conversation starts untouched; set 'turbo' to make Turbo the
         # deployment default for every new Session.
         defaultMode: default
+        # Gear used when defaultMode is turbo and no Session-specific choice
+        # exists yet. Kept explicit so headless benchmarks can select an arm.
+        defaultGear: fast

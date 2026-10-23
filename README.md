@@ -53,7 +53,7 @@ cd dsh-turbo
 pnpm install --frozen-lockfile
 pnpm run build
 pnpm test
-powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop
 ```
 
 安装后刷新 DeepSeek Harness 页面；如果此前运行过旧版本，请完整重启 DeepSeek Harness，让 Node/Cordis
@@ -80,7 +80,7 @@ Invoke-RestMethod http://127.0.0.1:19387/api/dsh-turbo/health | ConvertTo-Json -
 卸载：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profile desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profile desktop
 ```
 
 ### 测试与资料
@@ -188,7 +188,7 @@ This machine runs the **desktop** profile. Two equivalent ways:
 
 ```powershell
 # (a) scripted, uses the CLI bundled with the desktop app
-powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop
 
 # (b) the harness' own plugin manager (Web: Plugins → install → local path,
 #     or the plugin_manager tool with target = the plugin directory)
@@ -204,16 +204,53 @@ in `dsh.profile.bundles` (the bundle patch then inserts the row):
   config:
     sectionOrder: 700
     reasoningEffort: inherit
-    maxReasoningEffort: low
+    maxReasoningEffort: high
     evidenceLog: true
     storageDir: dsh-turbo
     defaultMode: default
+    defaultGear: fast
 ```
 
 Profile configuration reloads live, so the Host half mounts immediately; the
 client bundle appears in the boot graph and needs **one page refresh** (F5) to be
 materialized in the already-booted shell. A full `dsh` restart also works.
 
+### 3. Updating to a new version (the common case)
+
+A version update is install + restart, in that order, and nothing else:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop
+# then restart DeepSeek Harness
+```
+
+Why the restart is not optional: a running process holds the module it imported
+once (Cordis/Node cache by resolved path), so new `lib/` behaviour cannot take
+effect in place. Versions through 0.2.1 could also deactivate when a new patch
+introduced an unknown config key; the current source warns and ignores future
+keys, but a process already running the older module still needs one restart.
+`install.ps1` reports when the row is not active and asks for that restart.
+
+Practical rules:
+
+- bump `version` in `package.json` **and** `src/version.ts` together
+  (`node scripts/build.mjs --check` enforces it);
+- run `node scripts/build.mjs` before installing, so `lib/` matches `src/`;
+- after the restart, `Invoke-RestMethod http://127.0.0.1:19387/api/dsh-turbo/health`
+  must report the new `version`.
+
+### 4. Windows PowerShell notes
+
+`scripts/*.ps1` run on Windows PowerShell 5.1 and PowerShell 7:
+
+- use `-NoProfile`: a broken conda/python init in the profile prints its own
+  traceback before the script starts (that traceback is not this plugin);
+- defaults resolve after parameter binding (`$PSScriptRoot`), because
+  `$MyInvocation.MyCommand.Path` is empty inside `param()` under `-File`;
+- `resources\app.asar` is a file, so the bundled CLI is reached through Electron,
+  never through `Test-Path` on a path "inside" the archive;
+- the harness is a GUI app: the scripts prefer `pnpm` and verify the result from
+  the profile manifest rather than trusting `$LASTEXITCODE` of a GUI process.
 > **Rebuilt the plugin?** A running process keeps the already-imported module
 > (Cordis/Node cache by resolved path), so `lib/` changes need a process restart —
 > disabling and re-enabling the row is not enough. This is a harness fact, not a
@@ -237,7 +274,7 @@ and the Host log must show `dsh-turbo: session … mode=turbo`.
 ### 4. Uninstall (fully reversible)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profile desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profile desktop
 # or, with the harness' own manager:
 dsh plugin --profile desktop remove dsh-turbo
 ```
@@ -301,13 +338,14 @@ whether verification happened, because a checker cannot read intent.
 |---|---|---|
 | `sectionOrder` | `700` | Prompt section placement (unowned gap between plan/team policy and tool guidance). |
 | `reasoningEffort` | `inherit` | Request-level reasoning while Turbo is ON: `off`/`minimal`/`low`/`medium`/`high`/`max`, or `inherit` to leave the route alone. The **route decides** what exists — the shipped DeepSeek Messages adapter accepts only `off`/`low`/`high`/`max`, so `minimal` is refused. A refusal disables the lever for that Agent and retries the turn rather than failing it, and the capability row says so. |
-| `maxReasoningEffort` | `low` | Request-level effort for the Max gear. Max spends more through parallel breadth, while keeping per-request deliberation latency low. |
+| `maxReasoningEffort` | `high` | Request-level effort for the Max gear. This is the quality-first setting: it may spend more time and tokens than Fast. |
 | `evidenceLog` | `true` | Append one JSON line per applied step to `evidence.jsonl`. |
 | `storageDir` | `dsh-turbo` | Subdirectory of `$DSH_HOME/storages`. Remove `evidenceLog` to go without a log. |
 | `defaultMode` | `default` | Mode a never-toggled Session reads as. `turbo` makes Turbo the deployment default; the benchmark harness uses it to pick an arm. |
+| `defaultGear` | `fast` | Gear used by a never-toggled Turbo Session. The three-arm headless benchmark sets this to `fast` or `max`. |
 
-Unknown keys are rejected at load so a typo fails loudly instead of silently
-doing nothing.
+Invalid values for known keys are rejected. Unknown keys are warned and ignored
+so a config-first rolling update cannot deactivate an older loaded plugin.
 
 Where the policy applies: the Host half has **no hard service dependency**, so
 the same bundle works in Web/Desktop, in the headless one-shot runner
@@ -338,6 +376,8 @@ pnpm exec tsc --noEmit      # strict typecheck
 pnpm run build              # lib/index.js + lib/client.js (+ maps)
 node scripts/build.mjs --check   # CI gate: lib/ matches src/
 pnpm test                   # node --test tests/*.test.mjs
+pnpm run check:issues       # validate audit/issues.json + render audit/ISSUES.md
+pnpm run check:issues:strict # exit 2 while an open high issue remains
 node scripts/benchmark.mjs --help
 ```
 
@@ -347,12 +387,14 @@ node scripts/benchmark.mjs --help
 headless one-shot runner, on a machine-checked task set (`benchmark/tasks.json`):
 
 - one fresh workspace per run, seeded from the task's `seed` bytes;
-- the only difference between arms is `dsh-turbo.config.defaultMode` passed as a
-  `--patch` overlay — same profile, model, tools and safety;
-- arms interleaved per task, order flipped on odd tasks, so cache warm-up and
-  drift do not favour one arm;
+- the three arms are Default, Fast (`low`) and Max (`high`), selected through
+  the plugin's own mode/gear config — same profile, model, tools and safety;
+- arms use a rotating Latin-square order so cache warm-up and drift do not
+  consistently favour one arm;
 - metrics come from the runner's event stream (wall clock, first token, steps,
-  tool calls, tokens, whether verification ran) plus a Node assertion per task.
+  tool calls, tokens, whether verification ran) plus a Node assertion per task;
+- failed and timed-out runs never enter latency/token aggregates, and task
+  deltas require a complete same-round pass from every requested arm.
 
 A dedicated profile keeps the GUI untouched:
 

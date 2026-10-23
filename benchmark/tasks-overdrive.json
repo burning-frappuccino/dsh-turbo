@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "notes": "Multi-file deterministic tasks designed to expose useful parallel context gathering. Prompts never mention Turbo or parallelism; every arm receives identical text and fresh seed bytes.",
+  "tasks": [
+    {
+      "id": "regional-totals",
+      "prompt": "Read all region-*.json files in this directory and create totals.js. Export totals() using CommonJS. It must return { revenue, orders, regions }, where revenue and orders are sums and regions is the number of region files. Do not modify the JSON files or create any other file.",
+      "seed": {
+        "region-north.json": "{\"revenue\":1250,\"orders\":12}\n",
+        "region-south.json": "{\"revenue\":980,\"orders\":9}\n",
+        "region-east.json": "{\"revenue\":1430,\"orders\":15}\n",
+        "region-west.json": "{\"revenue\":840,\"orders\":8}\n",
+        "region-central.json": "{\"revenue\":1100,\"orders\":11}\n"
+      },
+      "check": "const m = require('./totals.js'); assert.deepStrictEqual(m.totals(), { revenue: 5600, orders: 55, regions: 5 })"
+    },
+    {
+      "id": "fix-three-modules",
+      "prompt": "Fix the independent bugs in range.js, clamp.js and slug.js so their exported functions match the comments in each file. Change only those three files and keep CommonJS exports.",
+      "seed": {
+        "range.js": "// Return [0, ..., n-1]\nfunction range(n) { return Array.from({ length: n + 1 }, (_, i) => i) }\nmodule.exports = { range }\n",
+        "clamp.js": "// Constrain value to inclusive min..max\nfunction clamp(value, min, max) { return Math.max(max, Math.min(min, value)) }\nmodule.exports = { clamp }\n",
+        "slug.js": "// Lowercase, trim, collapse non-alphanumeric runs to '-', strip edge '-'\nfunction slugify(text) { return String(text).toUpperCase().replace(/\\s+/g, '_') }\nmodule.exports = { slugify }\n"
+      },
+      "check": "const r = require('./range.js'); const c = require('./clamp.js'); const s = require('./slug.js'); assert.deepStrictEqual(r.range(3), [0,1,2]); assert(c.clamp(-1,0,5) === 0 && c.clamp(8,0,5) === 5 && c.clamp(3,0,5) === 3); assert(s.slugify('  Hello,  World! ') === 'hello-world')"
+    },
+    {
+      "id": "dashboard-summary",
+      "prompt": "Read users.json, sales.json, flags.json and limits.json, then create dashboard.js exporting buildDashboard() with CommonJS. Return { activeUsers, revenue, enabledFlags, overLimit }, where enabledFlags is an alphabetically sorted array and overLimit reports whether revenue exceeds limits.revenueWarning. Do not modify inputs or create other files.",
+      "seed": {
+        "users.json": "{\"users\":[{\"active\":true},{\"active\":false},{\"active\":true},{\"active\":true}]}\n",
+        "sales.json": "{\"sales\":[120,80,250,50]}\n",
+        "flags.json": "{\"beta\":true,\"audit\":false,\"darkMode\":true}\n",
+        "limits.json": "{\"revenueWarning\":450}\n"
+      },
+      "check": "const m = require('./dashboard.js'); assert.deepStrictEqual(m.buildDashboard(), { activeUsers: 3, revenue: 500, enabledFlags: ['beta','darkMode'], overLimit: true })"
+    },
+    {
+      "id": "merge-catalogs",
+      "prompt": "Read catalog-a.json, catalog-b.json, catalog-c.json and catalog-d.json. Create catalog.js exporting mergedIds() with CommonJS. It must return every id once, sorted numerically ascending. Do not modify inputs or create any other file.",
+      "seed": {
+        "catalog-a.json": "{\"ids\":[9,1,4,4]}\n",
+        "catalog-b.json": "{\"ids\":[2,9,7]}\n",
+        "catalog-c.json": "{\"ids\":[6,3,2]}\n",
+        "catalog-d.json": "{\"ids\":[8,5,1]}\n"
+      },
+      "check": "const m = require('./catalog.js'); assert.deepStrictEqual(m.mergedIds(), [1,2,3,4,5,6,7,8,9])"
+    },
+    {
+      "id": "package-audit",
+      "prompt": "Read service-api.json, service-web.json, service-worker.json and policy.json. Create audit.js exporting audit() with CommonJS. Return { services, uniqueDependencies, forbiddenHits }, where services is the number of service files, uniqueDependencies is an alphabetically sorted array, and forbiddenHits contains sorted strings in the form service:name for dependencies listed in policy.forbidden. Do not modify inputs or create other files.",
+      "seed": {
+        "service-api.json": "{\"name\":\"api\",\"dependencies\":[\"fastify\",\"lodash\"]}\n",
+        "service-web.json": "{\"name\":\"web\",\"dependencies\":[\"react\",\"lodash\"]}\n",
+        "service-worker.json": "{\"name\":\"worker\",\"dependencies\":[\"bullmq\",\"request\"]}\n",
+        "policy.json": "{\"forbidden\":[\"request\",\"left-pad\"]}\n"
+      },
+      "check": "const m = require('./audit.js'); assert.deepStrictEqual(m.audit(), { services: 3, uniqueDependencies: ['bullmq','fastify','lodash','react','request'], forbiddenHits: ['worker:request'] })"
+    },
+    {
+      "id": "environment-matrix",
+      "prompt": "Read config-dev.json, config-test.json, config-stage.json and config-prod.json. Create matrix.js exporting missingRequired() with CommonJS. Required keys are host, port and secure. Return an object whose keys are environment names and values are alphabetically sorted missing keys; omit environments with nothing missing. Do not modify inputs or create other files.",
+      "seed": {
+        "config-dev.json": "{\"host\":\"localhost\",\"port\":3000,\"secure\":false}\n",
+        "config-test.json": "{\"host\":\"test.local\",\"secure\":false}\n",
+        "config-stage.json": "{\"port\":443,\"secure\":true}\n",
+        "config-prod.json": "{\"host\":\"prod.local\",\"port\":443,\"secure\":true}\n"
+      },
+      "check": "const m = require('./matrix.js'); assert.deepStrictEqual(m.missingRequired(), { stage: ['host'], test: ['port'] })"
+    }
+  ]
+}

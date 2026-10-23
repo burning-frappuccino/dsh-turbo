@@ -37,7 +37,7 @@ test('the bundle patch inserts exactly one row with known config keys', () => {
   assert.match(patch, /- insert:/)
   assert.match(patch, /- id: dsh-turbo\n {6}name: dsh-turbo/)
   const keys = [...patch.matchAll(/^ {8}([A-Za-z][A-Za-z0-9]*):/gm)].map((match) => match[1])
-  assert.deepEqual(keys.sort(), ['defaultMode', 'evidenceLog', 'maxReasoningEffort', 'reasoningEffort', 'sectionOrder', 'storageDir'])
+  assert.deepEqual(keys.sort(), ['defaultGear', 'defaultMode', 'evidenceLog', 'maxReasoningEffort', 'reasoningEffort', 'sectionOrder', 'storageDir'])
 })
 
 test('the Host artifact exports a Cordis functional plugin with no DSH imports', () => {

@@ -91,23 +91,28 @@ test('the prompt section renders the policy only for Turbo Sessions', () => {
   })
 })
 
-test('the config rejects unknown keys and invalid values', () => {
+test('the config tolerates unknown keys but rejects invalid known values', () => {
   assert.deepEqual(resolveConfig(undefined), {
     sectionOrder: 700,
     reasoningEffort: 'inherit',
-    maxReasoningEffort: 'low',
+    maxReasoningEffort: 'high',
     evidenceLog: true,
     storageDir: 'dsh-turbo',
     defaultMode: 'default',
+    defaultGear: 'fast',
   })
-  assert.throws(() => resolveConfig({ nope: true }), /unknown config key/)
+  const warned = []
+  assert.equal(resolveConfig({ nope: true }, (keys) => warned.push(...keys)).sectionOrder, 700)
+  assert.deepEqual(warned, ['nope'])
   assert.throws(() => resolveConfig({ sectionOrder: 'high' }), /finite number/)
   assert.throws(() => resolveConfig({ reasoningEffort: 'turbo' }), /reasoningEffort/)
   assert.throws(() => resolveConfig({ maxReasoningEffort: 'turbo' }), /maxReasoningEffort/)
   assert.throws(() => resolveConfig({ storageDir: '../escape' }), /storageDir/)
   assert.throws(() => resolveConfig({ defaultMode: 'warp' }), /defaultMode/)
+  assert.throws(() => resolveConfig({ defaultGear: 'warp' }), /defaultGear/)
   // A deployment may make Turbo the default for new Sessions.
   assert.equal(resolveConfig({ defaultMode: 'turbo' }).defaultMode, 'turbo')
+  assert.equal(resolveConfig({ defaultGear: 'max' }).defaultGear, 'max')
 })
 
 test('Turbo alone lowers reasoning effort and preserves the rest of the request', async () => {
@@ -257,7 +262,7 @@ test('GET /state reports default, capabilities and metrics for an unknown Sessio
   assert.equal(promptCap.state, 'applied')
   const effort = body.capabilities.find((entry) => entry.id === 'reasoning-effort')
   assert.equal(effort.state, 'off')
-  assert.match(effort.detail, /Fast "inherit" \/ Max "low"/)
+  assert.match(effort.detail, /Fast "inherit" \/ Max "high"/)
   const optional = body.capabilities.find((entry) => entry.id === 'optional-stages')
   assert.equal(optional.state, 'unavailable', 'turbo never claims it can skip a stage it cannot see')
 })
