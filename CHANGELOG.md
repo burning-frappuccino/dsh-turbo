@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3 — 2026-10-24
+
+- Counts model steps in both default and Turbo modes so ON/OFF comparisons use the same metric.
+- Recognizes `ops_bash` and Python `unittest` runs in verification evidence.
+- Keeps Turbo planning compact and moves implementation into tool calls sooner.
+- Adds an `orders-py` regression benchmark and documents the measured, non-guaranteed results.
+- Documents the GitHub/market installation path to avoid the unrelated npm package with the same name.
+
 ## 0.2.1 — 2026-10-23
 
 - Adopts **DSH OVERDRIVE** as the public product name and the tagline “少走弯路，火力全开”。

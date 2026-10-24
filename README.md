@@ -47,6 +47,17 @@ Turbo 开关与两档滑块，并在 Host 运行阶段应用可撤销的执行�
 
 ### 安装
 
+插件市场上架后，推荐直接使用市场条目，或通过同一 GitHub 源安装：
+
+```powershell
+dsh plugin --profile desktop add github:burning-frappuccino/dsh-turbo
+```
+
+> 不要运行 `dsh plugin add dsh-turbo`：npm 上的同名包属于另一个项目。本项目的市场条目和安装命令均以
+> `github:burning-frappuccino/dsh-turbo` 为准。
+
+从源码安装：
+
 ```powershell
 git clone https://github.com/burning-frappuccino/dsh-turbo.git
 cd dsh-turbo
@@ -85,7 +96,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profi
 
 ### 测试与资料
 
-- 自动测试：**44 项全部通过**。
+- 自动测试：**46 项全部通过**。
 - [`PERFORMANCE.md`](./PERFORMANCE.md)：性能测试、用户同题对照与局限说明。
 - [`compatibility-report.md`](./compatibility-report.md)：DSH API、Hook 和兼容性核查。
 - [`STATUS.md`](./STATUS.md)：开发状态与文件清单。
@@ -170,19 +181,30 @@ shown to ordinary users.
 
 ## Install
 
-### 1. Build (once)
+### 1. Install from the market or GitHub
+
+After the market entry is published, install it there or use the same GitHub source directly:
+
+```powershell
+dsh plugin --profile desktop add github:burning-frappuccino/dsh-turbo
+```
+
+Do **not** run `dsh plugin add dsh-turbo`: the package with that name on npm is an unrelated
+project. This plugin's canonical install source is `github:burning-frappuccino/dsh-turbo`.
+
+### 2. Build from source (optional)
 
 ```powershell
 git clone https://github.com/burning-frappuccino/dsh-turbo.git
 cd C:\path\to\dsh-turbo
 pnpm install --frozen-lockfile
 pnpm run build     # writes lib/index.js + lib/client.js
-pnpm test          # 44 tests: state, gears, policy, toggle, compatibility
+pnpm test          # 46 tests: state, gears, policy, toggle, compatibility
 ```
 
 `lib/` is generated; the package ships it so consumers do not need a toolchain.
 
-### 2. Add the bundle to the profile that is actually running
+### 3. Add a local build to the profile that is actually running
 
 This machine runs the **desktop** profile. Two equivalent ways:
 
@@ -215,7 +237,7 @@ Profile configuration reloads live, so the Host half mounts immediately; the
 client bundle appears in the boot graph and needs **one page refresh** (F5) to be
 materialized in the already-booted shell. A full `dsh` restart also works.
 
-### 3. Updating to a new version (the common case)
+### 4. Updating to a new version (the common case)
 
 A version update is install + restart, in that order, and nothing else:
 
@@ -239,7 +261,7 @@ Practical rules:
 - after the restart, `Invoke-RestMethod http://127.0.0.1:19387/api/dsh-turbo/health`
   must report the new `version`.
 
-### 4. Windows PowerShell notes
+### 5. Windows PowerShell notes
 
 `scripts/*.ps1` run on Windows PowerShell 5.1 and PowerShell 7:
 
@@ -256,7 +278,7 @@ Practical rules:
 > disabling and re-enabling the row is not enough. This is a harness fact, not a
 > plugin bug; see `compatibility-report.md` §9.
 
-### 3. Verify
+### 6. Verify
 
 ```powershell
 # Host half alive + capabilities
@@ -271,7 +293,7 @@ panel explains the measured user benefit and invites a same-task ON/OFF test.
 Technical capability state remains available through the Host health/state API,
 and the Host log must show `dsh-turbo: session … mode=turbo`.
 
-### 4. Uninstall (fully reversible)
+### 7. Uninstall (fully reversible)
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall.ps1 -Profile desktop

@@ -1,6 +1,6 @@
 {
   "name": "dsh-turbo",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "description": "DSH OVERDRIVE — native session-scoped Fast/Max execution gears for DeepSeek Harness (package id: dsh-turbo).",
   "license": "MIT",
