@@ -38,6 +38,8 @@ export function renderTurboPolicy(gear: TurboGear = 'fast'): string {
     '',
     'Plan briefly, then execute as soon as the necessary context is in hand. Do not re-derive facts you already have, do not re-read the same file, and do not compare equivalent options.',
     '',
+    'Keep planning compact. Put implementation into tool calls instead of drafting it at length before acting.',
+    '',
     'Prefer one complete implementation pass over incremental rewriting. Use parallel tool calls when the operations are independent; keep dependent steps in dependency order.',
     '',
     'Do not open optional review, reflection, or re-verification stages. Do not start full suites, builds, formatters, or linters that the user did not ask for and that the acceptance criteria do not require.',

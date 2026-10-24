@@ -67,6 +67,14 @@
         "config-prod.json": "{\"host\":\"prod.local\",\"port\":443,\"secure\":true}\n"
       },
       "check": "const m = require('./matrix.js'); assert.deepStrictEqual(m.missingRequired(), { stage: ['host'], test: ['port'] })"
+    },
+    {
+      "id": "orders-py",
+      "prompt": "Using only the Python standard library, create orders.py and test_orders.py. orders.py accepts a CSV path with columns order_id,amount,status. Count only paid rows; valid amounts are positive plain decimals with at most two decimal places. Count other statuses as ignored, invalid paid amounts as invalid, and later valid duplicate order_ids as duplicates; invalid rows do not reserve an id. Sum with Decimal and print JSON containing count, total, duplicates, invalid and ignored, with total as a two-decimal string. Missing files or required columns must write a short error to stderr and exit nonzero. Use unittest for the main rules and error handling, and run the tests.",
+      "seed": {
+        "acceptance.csv": "order_id,amount,status\nA001,19.90,paid\nA002,10.05,paid\nA001,19.90,paid\nA003,8.00,refunded\nA004,abc,paid\nA004,0.10,paid\n"
+      },
+      "check": "const fs = require('node:fs'); const cp = require('node:child_process'); assert(fs.existsSync('orders.py') && fs.existsSync('test_orders.py')); const out = cp.execFileSync('python', ['orders.py', 'acceptance.csv'], { encoding: 'utf8' }); assert.deepStrictEqual(JSON.parse(out), { count: 3, total: '30.05', duplicates: 1, invalid: 1, ignored: 1 }); cp.execFileSync('python', ['-m', 'unittest', '-q', 'test_orders.py'], { stdio: 'ignore' })"
     }
   ]
 }

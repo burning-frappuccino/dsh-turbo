@@ -366,6 +366,32 @@ test('agent/pre-step stamps the mode, counts steps and writes evidence', async (
   assert.equal(body.metrics.lastMode, 'turbo')
 })
 
+test('default mode counts steps and observes ops_bash unittest verification', async () => {
+  const host = boot()
+  const agent = { id: SESSION, session: { id: SESSION } }
+
+  host.emit('session/event', { id: SESSION }, { type: 'turn/start', data: { turn: 1 } })
+  await host.dispatchWaterfall('agent/pre-step', {
+    agent, turn: 1, step: 1, messages: [], signal: new AbortController().signal,
+  }, () => Promise.resolve({ kind: 'enter', messages: [] }))
+  host.emit('session/event', { id: SESSION }, {
+    type: 'tool/call',
+    data: {
+      turn: 1,
+      step: 1,
+      callId: 'c1',
+      name: 'ops_bash',
+      arguments: '{"command":"py -3 -m unittest -v test_orders.py"}',
+    },
+  })
+  host.emit('session/event', { id: SESSION }, { type: 'turn/end', data: { turn: 1 } })
+
+  const { body } = await readState(host)
+  assert.equal(body.metrics.lastSteps, 1)
+  assert.equal(body.metrics.lastVerification, true)
+  assert.equal(body.metrics.lastMode, 'default')
+})
+
 test('a rejected pre-step is not counted and does not consume evidence', async () => {
   const host = boot()
   const agent = { id: SESSION, session: { id: SESSION } }
@@ -401,6 +427,8 @@ test('verification detection is observation only', () => {
   assert.equal(looksLikeVerification('{"command":"npm test"}'), true)
   assert.equal(looksLikeVerification({ command: 'pnpm run build' }), true)
   assert.equal(looksLikeVerification({ command: 'go test ./...' }), true)
+  assert.equal(looksLikeVerification({ command: 'python -m unittest -v test_orders.py' }), true)
+  assert.equal(looksLikeVerification({ command: 'py -3 -m unittest test_orders.py' }), true)
   assert.equal(looksLikeVerification({ command: 'git status' }), false)
   assert.equal(looksLikeVerification({ command: 'echo build later' }), false)
   assert.equal(looksLikeVerification(undefined), false)

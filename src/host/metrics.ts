@@ -44,10 +44,10 @@ export interface MetricsOptions {
 }
 
 /** Tools whose arguments can carry a shell command. */
-const SHELL_TOOLS = new Set(['pwsh', 'bash', 'shell', 'job_start', 'terminal'])
+const SHELL_TOOLS = new Set(['pwsh', 'bash', 'ops_bash', 'shell', 'job_start', 'terminal'])
 
 /** Commands that count as a real verification step. */
-const VERIFICATION_COMMAND = /(?:^|[\s;&|])(?:npm|pnpm|yarn|bun|deno)\s+(?:run\s+)?(?:test|tests|lint|typecheck|build)\b|\b(?:vitest|jest|pytest|mocha|ava|ctest|cargo\s+test|go\s+test|dotnet\s+(?:test|build)|mvn\s+(?:test|verify)|gradle\w*\s+(?:test|check|build)|tsc\b|node\s+--test)/i
+const VERIFICATION_COMMAND = /(?:^|[\s;&|])(?:npm|pnpm|yarn|bun|deno)\s+(?:run\s+)?(?:test|tests|lint|typecheck|build)\b|\b(?:python(?:3(?:\.\d+)?)?|py(?:\s+-\d+(?:\.\d+)?)?)\s+-m\s+unittest\b|\b(?:vitest|jest|pytest|mocha|ava|ctest|cargo\s+test|go\s+test|dotnet\s+(?:test|build)|mvn\s+(?:test|verify)|gradle\w*\s+(?:test|check|build)|tsc\b|node\s+--test)/i
 
 /** Per-Session live bookkeeping that is not part of the durable record. */
 interface LiveTurn {

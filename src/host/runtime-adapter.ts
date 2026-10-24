@@ -300,7 +300,7 @@ export class RuntimeAdapter {
 
     const state = this.#store.get(sessionId)
     this.#caps.preStepHook = true
-    if (state.mode === 'turbo') this.#metrics.countStep(sessionId, turn)
+    this.#metrics.countStep(sessionId, turn)
 
     const policy = policyFor(state.mode, state.gear)
     this.#evidence.write({

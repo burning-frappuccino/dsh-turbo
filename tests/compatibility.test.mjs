@@ -91,6 +91,7 @@ test('the prompt policy states delivery, verification disclosure and safeguards'
   const prompt = read('src/prompts/turbo-policy.ts')
   assert.match(prompt, /TURBO EXECUTION MODE/)
   assert.match(prompt, /wall-clock/i)
+  assert.match(prompt, /Keep planning compact/)
   assert.match(prompt, /Verified: none/)
   assert.match(prompt, /cheapest command that would catch a wrong result/)
   assert.match(prompt, /Never describe code as tested when no test ran/i)
