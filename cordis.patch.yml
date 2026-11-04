@@ -19,9 +19,9 @@
         # Turbo ON lowers the request's reasoning effort through the verified
         # agent/request waterfall. Turbo OFF still returns the original request
         # unchanged. Set 'inherit' to disable this latency/quality trade-off.
-        # The shipped DeepSeek Messages adapter accepts only off|low|high|max;
-        # an id it refuses disables the lever for that Agent (the turn retries
-        # without it) instead of failing.
+        # The exact model capability is queried before this value is injected.
+        # Unsupported models keep their original request unchanged; a late
+        # adapter refusal still disables the lever and retries as a fallback.
         reasoningEffort: low
         # Max deliberately spends more reasoning and tool budget. This makes
         # it a distinct quality-first arm rather than Fast with different copy.

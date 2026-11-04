@@ -31,7 +31,7 @@ import { isSessionId } from './session-store.js'
 import type { TurboSessionStore } from './session-store.js'
 import type { TurboMetrics } from './metrics.js'
 import type { EvidenceLog } from './evidence.js'
-import type { AgentLike, Disposer, PromptSection, TurboContext } from './cordis-surface.js'
+import type { AgentLike, Disposer, LlmServiceLike, PromptSection, TurboContext } from './cordis-surface.js'
 
 export interface AdapterOptions {
   readonly ctx: TurboContext
@@ -80,6 +80,8 @@ export class RuntimeAdapter {
   }
   /** Agent-scoped request hooks owned by this adapter, keyed for de-duplication. */
   readonly #effortHooks = new Map<string, Disposer>()
+  /** Exact provider/model/effort capability answers already observed. */
+  readonly #effortSupport = new Map<string, boolean>()
   /** One warning per process when another listener wins the effort field. */
   #effortMismatchReported = false
 
@@ -171,6 +173,12 @@ export class RuntimeAdapter {
           }
         }))
       }
+
+      // Adapter settings and HMR can change one route's capability metadata.
+      // Never carry a stale answer across that supported invalidation event.
+      disposers.push(this.#ctx.on('llm/adapters-updated', (() => {
+        this.#effortSupport.clear()
+      }) as never))
     }
 
     // ── 5. Housekeeping: prune expired Session state ─────────────────────────
@@ -202,6 +210,7 @@ export class RuntimeAdapter {
         }
       }
       this.#effortHooks.clear()
+      this.#effortSupport.clear()
       this.#caps.reasoningEffort = false
       this.#caps.observedEffort = undefined
     }
@@ -397,7 +406,7 @@ export class RuntimeAdapter {
     // own effort. Registering last would mean being overwritten; registering
     // first means this listener sees that final config and rewrites it after.
     const disposeRequest = agentCtx.on('agent/request', (async (
-      _payload: { turn?: number; step?: number },
+      payload: { turn?: number; step?: number; signal?: AbortSignal },
       next: () => Promise<Record<string, unknown>>,
     ) => {
       const config = await next()
@@ -405,6 +414,12 @@ export class RuntimeAdapter {
       if (state.mode !== 'turbo') return config
       const effort = this.#effortFor(state.gear)
       if (effort === 'inherit') return config
+      const provider = typeof config.provider === 'string' ? config.provider : undefined
+      const model = typeof config.model === 'string' ? config.model : undefined
+      if (provider === undefined || provider === '' || model === undefined || model === '') return config
+      if (!await this.#supportsEffort(agent.id, agentCtx.llm, provider, model, effort, payload.signal)) {
+        return config
+      }
       return { ...config, reasoningEffort: effort }
     }) as never, { prepend: true })
 
@@ -458,6 +473,86 @@ export class RuntimeAdapter {
       reason,
     })
     this.#effortHooks.get(agentId)?.()
+  }
+
+  /** Apply a request control only when the exact model advertises that id. */
+  async #supportsEffort(
+    agentId: string,
+    llm: LlmServiceLike | undefined,
+    provider: string,
+    model: string,
+    effort: Exclude<TurboConfig['reasoningEffort'], 'inherit'>,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const key = `${provider}\u0000${model}\u0000${effort}`
+    const cached = this.#effortSupport.get(key)
+    if (cached !== undefined) {
+      if (cached) {
+        this.#caps.effortUnavailable = false
+        this.#caps.effortError = undefined
+      } else {
+        this.#caps.reasoningEffort = false
+        this.#caps.observedEffort = undefined
+        this.#caps.effortUnavailable = true
+        this.#caps.effortError = this.#unsupportedEffortReason(provider, model, effort)
+      }
+      return cached
+    }
+
+    if (llm === undefined || typeof llm.resolveModelInfo !== 'function') {
+      this.#caps.effortUnavailable = true
+      this.#caps.effortError = 'the Agent context exposes no llm capability query'
+      return false
+    }
+
+    try {
+      const info = await llm.resolveModelInfo(provider, model, signal)
+      const supported = info.reasoning?.efforts.some((entry) => entry.id === effort) === true
+      this.#effortSupport.set(key, supported)
+      if (supported) {
+        this.#caps.effortUnavailable = false
+        this.#caps.effortError = undefined
+        return true
+      }
+
+      const reason = this.#unsupportedEffortReason(provider, model, effort)
+      this.#caps.reasoningEffort = false
+      this.#caps.observedEffort = undefined
+      this.#caps.effortUnavailable = true
+      this.#caps.effortError = reason
+      this.#effortMismatchReported = true
+      this.#ctx.logger?.warn('dsh-turbo: %s; leaving the request unchanged', reason)
+      this.#evidence.write({
+        event: 'effort-unsupported',
+        session: agentId,
+        provider,
+        model,
+        effort,
+        action: 'request-unchanged',
+      })
+      return false
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.#caps.reasoningEffort = false
+      this.#caps.observedEffort = undefined
+      this.#caps.effortUnavailable = true
+      this.#caps.effortError = `capability lookup failed: ${reason}`
+      this.#ctx.logger?.warn(
+        'dsh-turbo: cannot verify reasoning effort support for provider "%s" model "%s": %s; leaving the request unchanged',
+        provider,
+        model,
+        reason,
+      )
+      return false
+    }
+  }
+
+  #unsupportedEffortReason(
+    provider: string,
+    model: string,
+    effort: Exclude<TurboConfig['reasoningEffort'], 'inherit'>,
+  ): string {
+    return `provider "${provider}" model "${model}" does not advertise reasoning effort "${effort}"`
   }
 
   /** Resolve the request-level lever for the selected Turbo gear. */

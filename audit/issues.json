@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0.0",
   "kind": "plugin-audit",
-  "generatedAt": "2026-10-23T22:10:50+08:00",
+  "generatedAt": "2026-11-04T19:12:33+08:00",
   "generator": "manual audit (assistant) against the working tree",
   "subject": {
     "name": "dsh-turbo",
-    "version": "0.2.2",
-    "gitHead": "be07e50",
-    "gitHeadTime": "2026-10-23T13:32:56+08:00",
+    "version": "0.2.4",
+    "gitHead": "970412e",
+    "gitHeadTime": "2026-10-24T21:51:05+08:00",
     "workingTreeDirty": true,
     "repository": "."
   },
@@ -27,28 +27,28 @@
       "command": "pnpm exec tsc --noEmit",
       "result": "pass",
       "detail": "strict, no diagnostics",
-      "checkedAt": "2026-10-23T21:35:00+08:00"
+      "checkedAt": "2026-11-04T19:12:33+08:00"
     },
     {
       "id": "build-freshness",
       "command": "node scripts/build.mjs --check",
       "result": "pass",
       "detail": "lib/ matches src/",
-      "checkedAt": "2026-10-23T21:35:00+08:00"
+      "checkedAt": "2026-11-04T19:12:33+08:00"
     },
     {
       "id": "unit-tests",
       "command": "node --test tests/*.test.mjs",
       "result": "pass",
-      "detail": "45 tests, 45 passed, 0 failed",
-      "checkedAt": "2026-10-23T21:35:00+08:00"
+      "detail": "48 tests, 48 passed, 0 failed",
+      "checkedAt": "2026-11-04T19:12:33+08:00"
     },
     {
       "id": "live-host-bridge",
       "command": "GET http://127.0.0.1:19387/api/dsh-turbo/health",
-      "result": "fail",
-      "detail": "HTTP 401: the dsh-turbo row is not active in the running process (see TURBO-001)",
-      "checkedAt": "2026-10-23T21:35:00+08:00"
+      "result": "skipped",
+      "detail": "Not exercised: no DSH desktop process was listening on 127.0.0.1:19387",
+      "checkedAt": "2026-11-04T19:12:33+08:00"
     },
     {
       "id": "installer-script",
@@ -315,17 +315,40 @@
       },
       "relatedFiles": ["package.json", "scripts/check-issues.mjs", "audit/issues.json"],
       "workaround": "Use node scripts/check-issues.mjs directly on older checkouts."
+    },
+    {
+      "id": "TURBO-013",
+      "severity": "high",
+      "category": "runtime-activation",
+      "status": "fixed",
+      "title": "Unsupported exact-model effort could fail before the retry hook",
+      "summary": "DSH validates the exact model's reasoning capabilities inside prepareCall, before agent/request-error is emitted. A model such as raccoon-vision/sn-deepseek-v4-1-flash-1017 therefore failed the whole turn when Turbo injected low, bypassing the existing late-error fallback.",
+      "evidence": [
+        "GitHub issue #1 reports provider raccoon-vision model sn-deepseek-v4-1-flash-1017 does not support reasoning effort low",
+        "DSH 0.2.0-rc.2 source: AgentLoop prepareRequest calls llm.prepareCall before the agent/request-error waterfall",
+        "fixed: RuntimeAdapter queries ctx.llm.resolveModelInfo(provider, model) and injects only an advertised effort id",
+        "tests: unsupported exact model and failed capability lookup both preserve the original request",
+        "live smoke: Fast and Max both passed; evidence recorded low and high respectively"
+      ],
+      "impact": "Users of otherwise valid third-party models could lose the whole turn merely by enabling Turbo.",
+      "recommendation": {
+        "action": "Done: capability-gate every effort override, cache exact route answers, invalidate them on llm/adapters-updated, and retain the late retry fallback.",
+        "effort": "M",
+        "risk": "low"
+      },
+      "relatedFiles": ["src/host/runtime-adapter.ts", "src/host/cordis-surface.ts", "tests/runtime-policy.test.mjs"],
+      "workaround": "On older releases, set both gear efforts to inherit for models that do not advertise reasoning controls."
     }
   ],
   "counts": {
-    "total": 12,
+    "total": 13,
     "open": 5,
-    "fixed": 5,
+    "fixed": 6,
     "documented": 1,
     "accepted": 1,
     "bySeverity": {
       "critical": 0,
-      "high": 3,
+      "high": 4,
       "medium": 6,
       "low": 3
     }

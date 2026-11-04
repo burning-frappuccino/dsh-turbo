@@ -7,7 +7,7 @@
  */
 
 /** @returns {object} the fake context plus inspection handles */
-export function createFakeHost({ systemPrompt = true, webServer = true, agents = undefined } = {}) {
+export function createFakeHost({ systemPrompt = true, webServer = true, agents = undefined, llm = true } = {}) {
   const routes = []
   const effects = []
   const listeners = new Map()
@@ -72,6 +72,21 @@ export function createFakeHost({ systemPrompt = true, webServer = true, agents =
         }
       },
     }
+  }
+
+  if (llm !== false) {
+    ctx.llm = llm === true ? {
+      async resolveModelInfo(provider, model) {
+        return {
+          provider,
+          id: model,
+          name: model,
+          reasoning: {
+            efforts: ['off', 'minimal', 'low', 'medium', 'high', 'max'].map((id) => ({ id, name: id })),
+          },
+        }
+      },
+    } : llm
   }
 
   if (agents !== undefined) {

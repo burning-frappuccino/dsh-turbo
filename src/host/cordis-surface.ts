@@ -38,6 +38,23 @@ export interface SystemPromptService {
   getSectionOrder(name: string): number
 }
 
+/** Exact-model capability subset exposed by the provider-neutral `llm` service. */
+export interface LlmResolvedModelInfoLike {
+  readonly reasoning?: {
+    readonly efforts: readonly { readonly id: string }[]
+    readonly defaultEffort?: string | undefined
+  } | undefined
+}
+
+/** `ctx.llm` capability query used to avoid unsupported request controls. */
+export interface LlmServiceLike {
+  resolveModelInfo(
+    provider: string,
+    model: string,
+    signal?: AbortSignal,
+  ): Promise<LlmResolvedModelInfoLike>
+}
+
 /** The Session object reachable from an Agent (`agent.session`). */
 export interface SessionLike {
   readonly id: string
@@ -82,6 +99,7 @@ export interface TurboContext {
   inject?(deps: string[], callback: (ctx: TurboContext) => void): Disposer
   get?(name: string): unknown
   readonly systemPrompt?: SystemPromptService
+  readonly llm?: LlmServiceLike
   readonly webServer?: { register(route: HttpRoute): Disposer }
   readonly agents?: {
     get?(id: string): AgentLike | undefined

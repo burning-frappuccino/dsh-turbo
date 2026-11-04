@@ -152,7 +152,7 @@ the machine-readable sample and the broader benchmark are in
 | Prompt policy | `ctx.systemPrompt.section({ name: 'turbo:execution-policy', order: 700, text })` | Renders the selected Fast or Max policy **only** for sessions in Turbo; `''` otherwise. |
 | Per-step policy stamp | `agent/pre-step` waterfall | Records the effective mode and gear per step and writes one evidence line; it never blocks a step. |
 | Turn/tool metrics | `session/event` (`turn/start`, `turn/end`, `tool/call`) | Wall-clock turn time, steps, tool calls, whether a verification command actually ran. |
-| Reasoning effort | agent-scoped `agent/request` waterfall, registered `prepend` | Each gear can select its own `reasoningEffort`; Turbo OFF returns the upstream request unchanged. A refused id disables the lever and retries the turn. |
+| Reasoning effort | agent-scoped `agent/request` waterfall, registered `prepend` | Each gear can select its own `reasoningEffort`; Turbo OFF returns the upstream request unchanged. The exact model capability is checked first, so unsupported routes are left untouched; a late refusal disables the lever and retries as a fallback. |
 | Max parallel policy | prompt policy | Spends extra token/tool budget on independent reads, searches, tools and available subagents in the same turn. Mutating operations are never duplicated. |
 | Delivery discipline | prompt policy | Requires the reply to state whether the result was verified, and forbids claiming tests passed when none ran. |
 
@@ -359,7 +359,7 @@ whether verification happened, because a checker cannot read intent.
 | Key | Default | Meaning |
 |---|---|---|
 | `sectionOrder` | `700` | Prompt section placement (unowned gap between plan/team policy and tool guidance). |
-| `reasoningEffort` | `inherit` | Request-level reasoning while Turbo is ON: `off`/`minimal`/`low`/`medium`/`high`/`max`, or `inherit` to leave the route alone. The **route decides** what exists — the shipped DeepSeek Messages adapter accepts only `off`/`low`/`high`/`max`, so `minimal` is refused. A refusal disables the lever for that Agent and retries the turn rather than failing it, and the capability row says so. |
+| `reasoningEffort` | `inherit` | Request-level reasoning while Turbo is ON: `off`/`minimal`/`low`/`medium`/`high`/`max`, or `inherit` to leave the route alone. The **exact model decides** what exists. Turbo queries `llm.resolveModelInfo()` first and injects only an advertised id; unsupported models and failed capability lookups keep the upstream request unchanged. |
 | `maxReasoningEffort` | `high` | Request-level effort for the Max gear. This is the quality-first setting: it may spend more time and tokens than Fast. |
 | `evidenceLog` | `true` | Append one JSON line per applied step to `evidence.jsonl`. |
 | `storageDir` | `dsh-turbo` | Subdirectory of `$DSH_HOME/storages`. Remove `evidenceLog` to go without a log. |

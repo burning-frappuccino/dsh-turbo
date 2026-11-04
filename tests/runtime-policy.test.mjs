@@ -200,6 +200,75 @@ test('a refused reasoning effort retries the turn instead of failing it', async 
   assert.match(effort.detail, /kept the turn alive/)
 })
 
+test('an unsupported exact model is left untouched before DSH call validation', async () => {
+  const resolved = []
+  const host = createFakeHost({
+    llm: {
+      async resolveModelInfo(provider, model) {
+        resolved.push(`${provider}/${model}`)
+        if (model === 'supported-model') {
+          return { provider, id: model, name: model, reasoning: { efforts: [{ id: 'low' }] } }
+        }
+        return { provider, id: model, name: model }
+      },
+    },
+  })
+  apply(host.ctx, { reasoningEffort: 'low' })
+  const agent = { id: SESSION, session: { id: SESSION }, ctx: host.ctx }
+  host.emit('agent/created', { agent })
+  await writeState(host, { sessionId: SESSION, mode: 'turbo', expectedRevision: 0 })
+
+  const baseline = { provider: 'raccoon-vision', model: 'sn-deepseek-v4-1-flash-1017' }
+  const request = () => host.dispatchWaterfall(
+    'agent/request',
+    { turn: 1, step: 1, signal: new AbortController().signal },
+    () => Promise.resolve(baseline),
+  )
+  assert.deepEqual(await request(), baseline, 'unsupported effort is never added to the request')
+  assert.deepEqual(await host.dispatchWaterfall(
+    'agent/request',
+    { turn: 1, step: 1, signal: new AbortController().signal },
+    () => Promise.resolve({ provider: 'raccoon-vision', model: 'supported-model' }),
+  ), { provider: 'raccoon-vision', model: 'supported-model', reasoningEffort: 'low' })
+  assert.deepEqual(await request(), baseline, 'the cached unsupported result stays fail-safe')
+  assert.deepEqual(resolved, [
+    'raccoon-vision/sn-deepseek-v4-1-flash-1017',
+    'raccoon-vision/supported-model',
+  ])
+
+  const { body } = await readState(host)
+  const effort = body.capabilities.find((entry) => entry.id === 'reasoning-effort')
+  assert.equal(effort.state, 'off')
+  assert.match(effort.detail, /does not advertise reasoning effort "low"/)
+  assert.match(effort.detail, /left the route untouched/)
+})
+
+test('a failed capability lookup also leaves the request untouched', async () => {
+  const host = createFakeHost({
+    llm: {
+      async resolveModelInfo() {
+        throw new Error('catalog temporarily unavailable')
+      },
+    },
+  })
+  apply(host.ctx, { reasoningEffort: 'low' })
+  const agent = { id: SESSION, session: { id: SESSION }, ctx: host.ctx }
+  host.emit('agent/created', { agent })
+  await writeState(host, { sessionId: SESSION, mode: 'turbo', expectedRevision: 0 })
+
+  const baseline = { provider: 'temporary-provider', model: 'temporary-model' }
+  assert.deepEqual(await host.dispatchWaterfall(
+    'agent/request',
+    { turn: 1, step: 1, signal: new AbortController().signal },
+    () => Promise.resolve(baseline),
+  ), baseline)
+
+  const { body } = await readState(host)
+  const effort = body.capabilities.find((entry) => entry.id === 'reasoning-effort')
+  assert.equal(effort.state, 'off')
+  assert.match(effort.detail, /capability lookup failed/)
+})
+
 test('a different request failure is left to the rest of the chain', async () => {
   const host = boot({ reasoningEffort: 'low' })
   const agent = { id: SESSION, session: { id: SESSION }, ctx: host.ctx }
@@ -295,7 +364,7 @@ test('Max gear is revision-guarded and selects its own request effort', async ()
   assert.equal(selected.status, 200)
   assert.equal(selected.body.state.gear, 'max')
 
-  const baseline = { provider: 'deepseek-official', reasoningEffort: 'high' }
+  const baseline = { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high' }
   const request = await host.dispatchWaterfall(
     'agent/request',
     { turn: 1, step: 1, signal: new AbortController().signal },

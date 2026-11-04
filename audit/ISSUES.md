@@ -1,6 +1,6 @@
-# dsh-turbo audit — 0.2.2
+# dsh-turbo audit — 0.2.4
 
-Generated 2026-10-23T22:10:50+08:00 · git `be07e50` · DSH 0.2.0-rc.2 (desktop)
+Generated 2026-11-04T19:12:33+08:00 · git `970412e` · DSH 0.2.0-rc.2 (desktop)
 
 > Generated from `audit/issues.json` by `node scripts/check-issues.mjs --markdown audit/ISSUES.md`. Do not edit by hand.
 
@@ -11,7 +11,7 @@ Generated 2026-10-23T22:10:50+08:00 · git `be07e50` · DSH 0.2.0-rc.2 (desktop)
 | typecheck | pass | `pnpm exec tsc --noEmit` |
 | build-freshness | pass | `node scripts/build.mjs --check` |
 | unit-tests | pass | `node --test tests/*.test.mjs` |
-| live-host-bridge | fail | `GET http://127.0.0.1:19387/api/dsh-turbo/health` |
+| live-host-bridge | skipped | `GET http://127.0.0.1:19387/api/dsh-turbo/health` |
 | installer-script | pass | `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile desktop` |
 
 ## Issues
@@ -30,6 +30,7 @@ Generated 2026-10-23T22:10:50+08:00 · git `be07e50` · DSH 0.2.0-rc.2 (desktop)
 | TURBO-010 | high | fixed | install.ps1 crashed under Windows PowerShell 5.1 |
 | TURBO-011 | medium | fixed | An unsupported reasoning effort could fail entire turns |
 | TURBO-012 | medium | fixed | Bare pnpm audit/issues commands ran package-manager commands instead of the issue gate |
+| TURBO-013 | high | fixed | Unsupported exact-model effort could fail before the retry hook |
 
 ### TURBO-001 — A version update deactivates the row until the process restarts
 
@@ -215,3 +216,20 @@ Evidence:
 - verified: pnpm run check:issues runs check-issues.mjs and refreshes the Markdown view
 
 Files: `package.json`, `scripts/check-issues.mjs`, `audit/issues.json`
+
+### TURBO-013 — Unsupported exact-model effort could fail before the retry hook
+
+- severity: **high** · status: fixed · category: runtime-activation
+- recommendation: Done: capability-gate every effort override, cache exact route answers, invalidate them on llm/adapters-updated, and retain the late retry fallback. (effort M, risk low)
+- workaround: On older releases, set both gear efforts to inherit for models that do not advertise reasoning controls.
+
+DSH validates the exact model's reasoning capabilities inside prepareCall, before agent/request-error is emitted. A model such as raccoon-vision/sn-deepseek-v4-1-flash-1017 therefore failed the whole turn when Turbo injected low, bypassing the existing late-error fallback.
+
+Evidence:
+- GitHub issue #1 reports provider raccoon-vision model sn-deepseek-v4-1-flash-1017 does not support reasoning effort low
+- DSH 0.2.0-rc.2 source: AgentLoop prepareRequest calls llm.prepareCall before the agent/request-error waterfall
+- fixed: RuntimeAdapter queries ctx.llm.resolveModelInfo(provider, model) and injects only an advertised effort id
+- tests: unsupported exact model and failed capability lookup both preserve the original request
+- live smoke: Fast and Max both passed; evidence recorded low and high respectively
+
+Files: `src/host/runtime-adapter.ts`, `src/host/cordis-surface.ts`, `tests/runtime-policy.test.mjs`
